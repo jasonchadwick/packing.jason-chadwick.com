@@ -397,3 +397,127 @@ input {
   background: var(--color-border);
   border-radius: 3px;
 }
+
+/* ── Sync button (in header) ─────────────────────────────────────────────────── */
+.btn-sync {
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 1rem;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.55);
+  transition: color 0.15s, background 0.15s;
+}
+.btn-sync:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+}
+
+.btn-sync--none    { color: rgba(255, 255, 255, 0.45); }
+.btn-sync--syncing { color: white; }
+.btn-sync--synced  { color: rgba(255, 255, 255, 0.9); }
+.btn-sync--offline { color: rgba(255, 255, 255, 0.4); }
+.btn-sync--error   { color: #ffaaaa; }
+
+.btn-sync--syncing .sync-icon {
+  display: inline-block;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Modal ───────────────────────────────────────────────────────────────────── */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+}
+
+.modal {
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  padding: 28px 24px;
+  width: 100%;
+  max-width: 360px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.modal-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  margin-bottom: 10px;
+}
+
+.modal-desc {
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+.modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.modal-input {
+  padding: 10px 12px;
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text);
+  outline: none;
+  transition: border-color 0.15s;
+}
+.modal-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(45, 106, 79, 0.2); /* fallback */
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 20%, transparent);
+}
+
+.modal-error {
+  font-size: 0.85rem;
+  color: var(--color-danger);
+  margin-top: -4px;
+}
+
+.modal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.btn-primary {
+  padding: 10px 16px;
+  border-radius: var(--radius-sm);
+  background: var(--color-primary);
+  color: white;
+  font-size: 0.95rem;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+.btn-primary:hover {
+  background: var(--color-primary-hover);
+}
+
+.btn-ghost {
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  text-align: center;
+  transition: background 0.15s, color 0.15s;
+}
+.btn-ghost:hover {
+  background: var(--color-bg);
+  color: var(--color-text);
+}

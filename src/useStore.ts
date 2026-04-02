@@ -107,6 +107,9 @@ function reducer(state: AppState, action: Action): AppState {
           i.location === 'packing' ? { ...i, location: 'inventory', checked: false } : i
         ),
       };
+    case 'REPLACE_STATE':
+      // Preserve local UI tab selection; replace all data from remote
+      return { ...action.state, activeTab: state.activeTab };
     default:
       return state;
   }
