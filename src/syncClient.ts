@@ -77,6 +77,14 @@ export async function pushState(listId: string, state: AppState): Promise<void> 
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
+/** Cancels any pending debounced push. */
+export function cancelPush(): void {
+  if (debounceTimer !== null) {
+    clearTimeout(debounceTimer);
+    debounceTimer = null;
+  }
+}
+
 /** Schedules a debounced push and reports status via onStatus. */
 export function schedulePush(
   listId: string,
