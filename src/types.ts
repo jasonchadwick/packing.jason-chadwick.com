@@ -33,4 +33,5 @@ export type Action =
   | { type: 'RENAME_CATEGORY'; id: string; name: string }
   | { type: 'CLEAR_CHECKS' }
   | { type: 'SET_TAB'; tab: Location }
-  | { type: 'NEW_TRIP' };
+  | { type: 'NEW_TRIP' }
+  | { type: 'REPLACE_STATE'; state: AppState };

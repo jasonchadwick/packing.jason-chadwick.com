@@ -2,6 +2,16 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useStore } from './useStore';
 import type { Category, Item, Location } from './types';
 import type { Action } from './types';
+import type { SyncStatus } from './syncClient';
+import {
+  loadListId,
+  isOfflineOnly,
+  savePasscode,
+  setOfflineOnly,
+  fetchRemoteState,
+  schedulePush,
+} from './syncClient';
+import { PasscodeModal } from './PasscodeModal';
 
 // ── InlineEdit ────────────────────────────────────────────────────────────────
 
@@ -401,13 +411,31 @@ function InventoryView({ categories, items, dispatch }: ViewProps) {
 interface HeaderProps {
   onNewTrip: () => void;
   onClearChecks: () => void;
+  syncStatus: SyncStatus;
+  onSyncClick: () => void;
 }
 
-function Header({ onNewTrip, onClearChecks }: HeaderProps) {
+const SYNC_LABELS: Record<SyncStatus, string> = {
+  none: 'Enable sync',
+  syncing: 'Syncing…',
+  synced: 'Synced',
+  offline: 'Offline — changes saved locally',
+  error: 'Sync error — click to retry',
+};
+
+function Header({ onNewTrip, onClearChecks, syncStatus, onSyncClick }: HeaderProps) {
   return (
     <header className="app-header">
       <h1 className="app-title">🎒 Packing</h1>
       <div className="header-actions">
+        <button
+          className={`btn-sync btn-sync--${syncStatus}`}
+          onClick={onSyncClick}
+          title={SYNC_LABELS[syncStatus]}
+          aria-label={SYNC_LABELS[syncStatus]}
+        >
+          <span className="sync-icon">{syncStatus === 'syncing' ? '↻' : '☁'}</span>
+        </button>
         <button className="btn-secondary" onClick={onClearChecks}>
           Clear Checks
         </button>
@@ -450,6 +478,76 @@ function Tabs({ active, onChange }: TabsProps) {
 export default function App() {
   const { state, dispatch } = useStore();
 
+  // ── Sync state ──────────────────────────────────────────────────────────────
+
+  const [listId, setListId] = useState<string | null>(() => loadListId());
+  const [modalMode, setModalMode] = useState<'setup' | 'change' | null>(
+    () => loadListId() === null && !isOfflineOnly() ? 'setup' : null,
+  );
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>(
+    () => loadListId() !== null ? 'syncing' : 'none',
+  );
+
+  // Ref to always have the latest state available inside async callbacks
+  const stateRef = useRef(state);
+  useEffect(() => { stateRef.current = state; }, [state]);
+
+  // Refs to suppress spurious pushes
+  const isRemoteLoad = useRef(false);
+  const isFirstRender = useRef(true);
+  // Track which list ID we've already loaded from remote to avoid duplicate fetches
+  const loadedForListId = useRef<string | null>(null);
+
+  // Load from remote whenever a (new) list ID becomes active
+  useEffect(() => {
+    if (!listId || loadedForListId.current === listId) return;
+    loadedForListId.current = listId;
+    fetchRemoteState(listId)
+      .then(remote => {
+        if (remote) {
+          // Replace local state with remote; suppress the resulting push
+          isRemoteLoad.current = true;
+          dispatch({ type: 'REPLACE_STATE', state: remote });
+          setSyncStatus('synced');
+        } else {
+          // New list on remote — bootstrap it with the current local state
+          schedulePush(listId, stateRef.current, setSyncStatus);
+        }
+      })
+      .catch(() => setSyncStatus(navigator.onLine ? 'error' : 'offline'));
+  }, [listId, dispatch]);
+
+  // Debounced push on every local state change
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return; }
+    if (!listId) return;
+    if (isRemoteLoad.current) { isRemoteLoad.current = false; return; }
+    schedulePush(listId, state, setSyncStatus);
+  }, [state, listId]);
+
+  // ── Sync handlers ───────────────────────────────────────────────────────────
+
+  const handlePasscodeConfirm = useCallback(async (newPasscode: string) => {
+    // savePasscode hashes the input and stores only the hash — never the raw value
+    const id = await savePasscode(newPasscode);
+    setListId(id);
+    setSyncStatus('syncing'); // event handler — not an effect, so this is fine
+    setModalMode(null);
+    loadedForListId.current = null; // trigger a fresh remote load
+  }, []);
+
+  const handleSkip = useCallback(() => {
+    setOfflineOnly();
+    setModalMode(null);
+    setSyncStatus('none');
+  }, []);
+
+  const handleSyncClick = useCallback(() => {
+    setModalMode(listId ? 'change' : 'setup');
+  }, [listId]);
+
+  // ── List handlers ───────────────────────────────────────────────────────────
+
   const handleNewTrip = useCallback(() => {
     if (confirm('Start a new trip? All packing items will be moved back to inventory.')) {
       dispatch({ type: 'NEW_TRIP' });
@@ -462,7 +560,12 @@ export default function App() {
 
   return (
     <div className="app">
-      <Header onNewTrip={handleNewTrip} onClearChecks={handleClearChecks} />
+      <Header
+        onNewTrip={handleNewTrip}
+        onClearChecks={handleClearChecks}
+        syncStatus={syncStatus}
+        onSyncClick={handleSyncClick}
+      />
       <Tabs
         active={state.activeTab}
         onChange={tab => dispatch({ type: 'SET_TAB', tab })}
@@ -482,6 +585,14 @@ export default function App() {
           />
         )}
       </main>
+      {modalMode && (
+        <PasscodeModal
+          mode={modalMode}
+          onConfirm={handlePasscodeConfirm}
+          onSkip={modalMode === 'setup' ? handleSkip : undefined}
+          onClose={modalMode === 'change' ? () => setModalMode(null) : undefined}
+        />
+      )}
     </div>
   );
 }
