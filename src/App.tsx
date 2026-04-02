@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, createContext, useContext, useMemo } from 'react';
 import { useStore } from './useStore';
 import type { Category, Item, Location } from './types';
 import type { Action } from './types';
@@ -13,6 +13,106 @@ import {
   cancelPush,
 } from './syncClient';
 import { PasscodeModal } from './PasscodeModal';
+
+// ── Drag & Drop ───────────────────────────────────────────────────────────────
+
+interface DragCtx {
+  dragging: { id: string; type: 'category' | 'item' } | null;
+  dropTarget: { id: string; position: 'before' | 'after' } | null;
+  startDrag: (id: string, type: 'category' | 'item') => void;
+  endDrag: () => void;
+  onDragOver: (e: React.DragEvent, id: string, type: 'category' | 'item') => void;
+  onDrop: (e: React.DragEvent, id: string, type: 'category' | 'item') => void;
+}
+
+const DragContext = createContext<DragCtx | null>(null);
+
+function DragProvider({
+  children,
+  categories,
+  items,
+  dispatch,
+}: {
+  children: React.ReactNode;
+  categories: Category[];
+  items: Item[];
+  dispatch: React.Dispatch<Action>;
+}) {
+  const [dragging, setDragging] = useState<DragCtx['dragging']>(null);
+  const [dropTarget, setDropTarget] = useState<DragCtx['dropTarget']>(null);
+
+  // Refs keep callbacks free of stale closures without causing re-renders
+  const draggingRef = useRef(dragging);
+  const dropTargetRef = useRef(dropTarget);
+  const categoriesRef = useRef(categories);
+  const itemsRef = useRef(items);
+  useEffect(() => { draggingRef.current = dragging; }, [dragging]);
+  useEffect(() => { dropTargetRef.current = dropTarget; }, [dropTarget]);
+  useEffect(() => { categoriesRef.current = categories; }, [categories]);
+  useEffect(() => { itemsRef.current = items; }, [items]);
+
+  const startDrag = useCallback((id: string, type: 'category' | 'item') => {
+    setDragging({ id, type });
+    setDropTarget(null);
+  }, []);
+
+  const endDrag = useCallback(() => {
+    setDragging(null);
+    setDropTarget(null);
+  }, []);
+
+  const onDragOver = useCallback((e: React.DragEvent, targetId: string, type: 'category' | 'item') => {
+    const cur = draggingRef.current;
+    if (!cur || cur.id === targetId || cur.type !== type) return;
+
+    if (type === 'category') {
+      const draggedCat = categoriesRef.current.find(c => c.id === cur.id);
+      const targetCat = categoriesRef.current.find(c => c.id === targetId);
+      if (!draggedCat || !targetCat || draggedCat.parentId !== targetCat.parentId) return;
+    } else {
+      const draggedItem = itemsRef.current.find(i => i.id === cur.id);
+      const targetItem = itemsRef.current.find(i => i.id === targetId);
+      if (
+        !draggedItem || !targetItem ||
+        draggedItem.categoryId !== targetItem.categoryId ||
+        draggedItem.location !== targetItem.location
+      ) return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const position: 'before' | 'after' = e.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+    if (dropTargetRef.current?.id !== targetId || dropTargetRef.current?.position !== position) {
+      setDropTarget({ id: targetId, position });
+    }
+  }, []);
+
+  const onDrop = useCallback((e: React.DragEvent, targetId: string, type: 'category' | 'item') => {
+    e.preventDefault();
+    e.stopPropagation();
+    const cur = draggingRef.current;
+    const dt = dropTargetRef.current;
+    setDragging(null);
+    setDropTarget(null);
+
+    if (!cur || cur.type !== type || cur.id === targetId) return;
+
+    const position = dt?.position ?? 'after';
+    if (type === 'category') {
+      dispatch({ type: 'REORDER_CATEGORY', id: cur.id, targetId, position });
+    } else {
+      dispatch({ type: 'REORDER_ITEM', id: cur.id, targetId, position });
+    }
+  }, [dispatch]);
+
+  const ctx = useMemo(
+    () => ({ dragging, dropTarget, startDrag, endDrag, onDragOver, onDrop }),
+    [dragging, dropTarget, startDrag, endDrag, onDragOver, onDrop],
+  );
+
+  return <DragContext.Provider value={ctx}>{children}</DragContext.Provider>;
+}
 
 // ── InlineEdit ────────────────────────────────────────────────────────────────
 
@@ -122,15 +222,17 @@ function getSubtreeItemCount(
   return direct + nested;
 }
 
-function hasPackingItems(
+function hasPackingContent(
   categories: Category[],
   items: Item[],
   catId: string,
 ): boolean {
+  const cat = categories.find(c => c.id === catId);
+  if (cat?.isContainer) return true;
   if (items.some(i => i.categoryId === catId && i.location === 'packing')) return true;
   return categories
     .filter(c => c.parentId === catId)
-    .some(c => hasPackingItems(categories, items, c.id));
+    .some(c => hasPackingContent(categories, items, c.id));
 }
 
 function CategoryTree({
@@ -141,19 +243,49 @@ function CategoryTree({
   viewLocation,
   dispatch,
 }: CategoryTreeProps) {
+  const dragCtx = useContext(DragContext)!;
+  const blockRef = useRef<HTMLDivElement>(null);
+  const isDragHandleActive = useRef(false);
+
   const children = allCategories.filter(c => c.parentId === category.id);
   const catItems = items.filter(
     i => i.categoryId === category.id && i.location === viewLocation,
   );
   const subtreeCount = getSubtreeItemCount(allCategories, items, category.id, viewLocation);
 
-  if (viewLocation === 'packing' && !hasPackingItems(allCategories, items, category.id)) {
+  if (viewLocation === 'packing' && !hasPackingContent(allCategories, items, category.id)) {
     return null;
   }
 
+  const isDragging = dragCtx.dragging?.id === category.id && dragCtx.dragging.type === 'category';
+  const dropPos = dragCtx.dropTarget?.id === category.id ? dragCtx.dropTarget.position : null;
+
   return (
-    <div className="category-block" style={{ '--depth': depth } as React.CSSProperties}>
+    <div
+      ref={blockRef}
+      className={`category-block${isDragging ? ' is-dragging' : ''}${dropPos ? ` drop-${dropPos}` : ''}`}
+      style={{ '--depth': depth } as React.CSSProperties}
+      onDragOver={e => dragCtx.onDragOver(e, category.id, 'category')}
+      onDrop={e => dragCtx.onDrop(e, category.id, 'category')}
+    >
       <div className="category-header">
+        <span
+          className="drag-handle"
+          draggable
+          onMouseDown={() => { isDragHandleActive.current = true; }}
+          onDragStart={e => {
+            if (!isDragHandleActive.current) { e.preventDefault(); return; }
+            isDragHandleActive.current = false;
+            e.stopPropagation();
+            if (blockRef.current) e.dataTransfer.setDragImage(blockRef.current, 0, 0);
+            e.dataTransfer.effectAllowed = 'move';
+            dragCtx.startDrag(category.id, 'category');
+          }}
+          onDragEnd={() => { isDragHandleActive.current = false; dragCtx.endDrag(); }}
+          title="Drag to reorder"
+        >
+          ⠿
+        </span>
         <button
           className="btn-icon collapse-btn"
           onClick={() => dispatch({ type: 'TOGGLE_COLLAPSE', id: category.id })}
@@ -161,14 +293,31 @@ function CategoryTree({
         >
           {category.collapsed ? '▶' : '▼'}
         </button>
+        {viewLocation === 'packing' && category.isContainer && (
+          <input
+            type="checkbox"
+            className="container-packed-checkbox"
+            checked={category.packed}
+            onChange={() => dispatch({ type: 'TOGGLE_CONTAINER_PACKED', id: category.id })}
+            title="Mark container as packed"
+          />
+        )}
         <InlineEdit
           value={category.name}
           onSave={name => dispatch({ type: 'RENAME_CATEGORY', id: category.id, name })}
-          className="category-name"
+          className={`category-name${viewLocation === 'packing' && category.isContainer && category.packed ? ' packed' : ''}`}
         />
         {viewLocation === 'inventory' && subtreeCount > 0 && (
           <span className="badge">{subtreeCount}</span>
         )}
+        <button
+          className={`btn-icon container-toggle${category.isContainer ? ' active' : ''}`}
+          onClick={() => dispatch({ type: 'TOGGLE_CONTAINER', id: category.id })}
+          aria-label={category.isContainer ? 'Remove container status' : 'Mark as container'}
+          title={category.isContainer ? 'Remove container status' : 'Mark as container (bag, box, etc.)'}
+        >
+          📦
+        </button>
         <button
           className="btn-icon danger"
           onClick={() => {
@@ -237,8 +386,37 @@ interface ItemRowProps {
 }
 
 function ItemRow({ item, viewLocation, dispatch }: ItemRowProps) {
+  const dragCtx = useContext(DragContext)!;
+  const rowRef = useRef<HTMLDivElement>(null);
+  const isDragHandleActive = useRef(false);
+
+  const isDragging = dragCtx.dragging?.id === item.id && dragCtx.dragging.type === 'item';
+  const dropPos = dragCtx.dropTarget?.id === item.id ? dragCtx.dropTarget.position : null;
+
   return (
-    <div className={`item-row ${item.checked ? 'checked' : ''}`}>
+    <div
+      ref={rowRef}
+      className={`item-row${item.checked ? ' checked' : ''}${isDragging ? ' is-dragging' : ''}${dropPos ? ` drop-${dropPos}` : ''}`}
+      onDragOver={e => dragCtx.onDragOver(e, item.id, 'item')}
+      onDrop={e => dragCtx.onDrop(e, item.id, 'item')}
+    >
+      <span
+        className="drag-handle"
+        draggable
+        onMouseDown={() => { isDragHandleActive.current = true; }}
+        onDragStart={e => {
+          if (!isDragHandleActive.current) { e.preventDefault(); return; }
+          isDragHandleActive.current = false;
+          e.stopPropagation();
+          if (rowRef.current) e.dataTransfer.setDragImage(rowRef.current, 0, 0);
+          e.dataTransfer.effectAllowed = 'move';
+          dragCtx.startDrag(item.id, 'item');
+        }}
+        onDragEnd={() => { isDragHandleActive.current = false; dragCtx.endDrag(); }}
+        title="Drag to reorder"
+      >
+        ⠿
+      </span>
       {viewLocation === 'packing' && (
         <input
           type="checkbox"
@@ -297,50 +475,52 @@ function PackingView({ categories, items, dispatch }: ViewProps) {
   );
 
   return (
-    <div className="view">
-      {rootCategories.map(cat => (
-        <CategoryTree
-          key={cat.id}
-          category={cat}
-          allCategories={categories}
-          items={items}
-          depth={0}
-          viewLocation="packing"
-          dispatch={dispatch}
+    <DragProvider categories={categories} items={items} dispatch={dispatch}>
+      <div className="view">
+        {rootCategories.map(cat => (
+          <CategoryTree
+            key={cat.id}
+            category={cat}
+            allCategories={categories}
+            items={items}
+            depth={0}
+            viewLocation="packing"
+            dispatch={dispatch}
+          />
+        ))}
+
+        {uncategorized.length > 0 && (
+          <div className="category-block uncategorized" style={{ '--depth': 0 } as React.CSSProperties}>
+            <div className="category-header">
+              <span className="category-name muted">Uncategorized</span>
+            </div>
+            <div className="category-body">
+              {uncategorized.map(item => (
+                <ItemRow
+                  key={item.id}
+                  item={item}
+                  viewLocation="packing"
+                  dispatch={dispatch}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        <AddForm
+          placeholder="Add item to packing list…"
+          onAdd={name =>
+            dispatch({ type: 'ADD_ITEM', name, categoryId: null, location: 'packing' })
+          }
+          className="root-add"
         />
-      ))}
-
-      {uncategorized.length > 0 && (
-        <div className="category-block uncategorized" style={{ '--depth': 0 } as React.CSSProperties}>
-          <div className="category-header">
-            <span className="category-name muted">Uncategorized</span>
-          </div>
-          <div className="category-body">
-            {uncategorized.map(item => (
-              <ItemRow
-                key={item.id}
-                item={item}
-                viewLocation="packing"
-                dispatch={dispatch}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      <AddForm
-        placeholder="Add item to packing list…"
-        onAdd={name =>
-          dispatch({ type: 'ADD_ITEM', name, categoryId: null, location: 'packing' })
-        }
-        className="root-add"
-      />
-      <AddForm
-        placeholder="Add category…"
-        onAdd={name => dispatch({ type: 'ADD_CATEGORY', name, parentId: null })}
-        className="root-add"
-      />
-    </div>
+        <AddForm
+          placeholder="Add category…"
+          onAdd={name => dispatch({ type: 'ADD_CATEGORY', name, parentId: null })}
+          className="root-add"
+        />
+      </div>
+    </DragProvider>
   );
 }
 
@@ -353,57 +533,59 @@ function InventoryView({ categories, items, dispatch }: ViewProps) {
   );
 
   return (
-    <div className="view">
-      {rootCategories.map(cat => (
-        <CategoryTree
-          key={cat.id}
-          category={cat}
-          allCategories={categories}
-          items={items}
-          depth={0}
-          viewLocation="inventory"
-          dispatch={dispatch}
-        />
-      ))}
+    <DragProvider categories={categories} items={items} dispatch={dispatch}>
+      <div className="view">
+        {rootCategories.map(cat => (
+          <CategoryTree
+            key={cat.id}
+            category={cat}
+            allCategories={categories}
+            items={items}
+            depth={0}
+            viewLocation="inventory"
+            dispatch={dispatch}
+          />
+        ))}
 
-      {uncategorized.length > 0 && (
-        <div className="category-block uncategorized" style={{ '--depth': 0 } as React.CSSProperties}>
-          <div className="category-header">
-            <span className="category-name muted">Uncategorized</span>
-          </div>
-          <div className="category-body">
-            {uncategorized.map(item => (
-              <ItemRow
-                key={item.id}
-                item={item}
-                viewLocation="inventory"
-                dispatch={dispatch}
+        {uncategorized.length > 0 && (
+          <div className="category-block uncategorized" style={{ '--depth': 0 } as React.CSSProperties}>
+            <div className="category-header">
+              <span className="category-name muted">Uncategorized</span>
+            </div>
+            <div className="category-body">
+              {uncategorized.map(item => (
+                <ItemRow
+                  key={item.id}
+                  item={item}
+                  viewLocation="inventory"
+                  dispatch={dispatch}
+                />
+              ))}
+              <AddForm
+                placeholder="Add item here…"
+                onAdd={name =>
+                  dispatch({ type: 'ADD_ITEM', name, categoryId: null, location: 'inventory' })
+                }
+                className="cat-add-item"
               />
-            ))}
-            <AddForm
-              placeholder="Add item here…"
-              onAdd={name =>
-                dispatch({ type: 'ADD_ITEM', name, categoryId: null, location: 'inventory' })
-              }
-              className="cat-add-item"
-            />
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      <AddForm
-        placeholder="Add item to inventory…"
-        onAdd={name =>
-          dispatch({ type: 'ADD_ITEM', name, categoryId: null, location: 'inventory' })
-        }
-        className="root-add"
-      />
-      <AddForm
-        placeholder="Add category…"
-        onAdd={name => dispatch({ type: 'ADD_CATEGORY', name, parentId: null })}
-        className="root-add"
-      />
-    </div>
+        <AddForm
+          placeholder="Add item to inventory…"
+          onAdd={name =>
+            dispatch({ type: 'ADD_ITEM', name, categoryId: null, location: 'inventory' })
+          }
+          className="root-add"
+        />
+        <AddForm
+          placeholder="Add category…"
+          onAdd={name => dispatch({ type: 'ADD_CATEGORY', name, parentId: null })}
+          className="root-add"
+        />
+      </div>
+    </DragProvider>
   );
 }
 

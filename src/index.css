@@ -386,6 +386,83 @@ input {
   padding: 6px 10px;
 }
 
+/* ── Drag & Drop ─────────────────────────────────────────────────────────────── */
+.drag-handle {
+  cursor: grab;
+  color: var(--color-text-muted);
+  font-size: 1rem;
+  line-height: 1;
+  padding: 2px 1px;
+  user-select: none;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.drag-handle:active {
+  cursor: grabbing;
+}
+.category-header:hover .drag-handle,
+.item-row:hover .drag-handle {
+  opacity: 0.5;
+}
+.category-header:hover .drag-handle:hover,
+.item-row:hover .drag-handle:hover {
+  opacity: 1;
+}
+
+.is-dragging {
+  opacity: 0.35;
+}
+
+/* Drop line indicators */
+.item-row.drop-before {
+  box-shadow: 0 -2px 0 0 var(--color-primary);
+}
+.item-row.drop-after {
+  box-shadow: 0 2px 0 0 var(--color-primary);
+}
+.category-block.drop-before {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+.category-block.drop-after {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+/* ── Container ───────────────────────────────────────────────────────────────── */
+.container-toggle {
+  font-size: 0.9rem;
+  opacity: 0.25;
+  filter: grayscale(1);
+  transition: opacity 0.15s, filter 0.15s, background 0.15s;
+}
+.container-toggle:hover {
+  opacity: 0.65;
+  filter: grayscale(0.3);
+  background: var(--color-bg);
+}
+.container-toggle.active {
+  opacity: 1;
+  filter: none;
+}
+.container-toggle.active:hover {
+  background: var(--color-bg);
+}
+
+.container-packed-checkbox {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+
+.category-name.packed {
+  text-decoration: line-through;
+  color: var(--color-checked-text);
+}
+
 /* ── Scrollbar ───────────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar {
   width: 6px;

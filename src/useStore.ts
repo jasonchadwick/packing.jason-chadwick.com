@@ -64,6 +64,8 @@ function reducer(state: AppState, action: Action): AppState {
         name: action.name.trim(),
         parentId: action.parentId,
         collapsed: false,
+        isContainer: false,
+        packed: false,
       };
       return { ...state, categories: [...state.categories, category] };
     }
@@ -93,10 +95,47 @@ function reducer(state: AppState, action: Action): AppState {
           c.id === action.id ? { ...c, name: action.name.trim() } : c
         ),
       };
+    case 'REORDER_CATEGORY': {
+      const cats = [...state.categories];
+      const fromIdx = cats.findIndex(c => c.id === action.id);
+      if (fromIdx === -1) return state;
+      const [removed] = cats.splice(fromIdx, 1);
+      let toIdx = cats.findIndex(c => c.id === action.targetId);
+      if (toIdx === -1) return state;
+      if (action.position === 'after') toIdx += 1;
+      cats.splice(toIdx, 0, removed);
+      return { ...state, categories: cats };
+    }
+    case 'REORDER_ITEM': {
+      const items = [...state.items];
+      const fromIdx = items.findIndex(i => i.id === action.id);
+      if (fromIdx === -1) return state;
+      const [removed] = items.splice(fromIdx, 1);
+      let toIdx = items.findIndex(i => i.id === action.targetId);
+      if (toIdx === -1) return state;
+      if (action.position === 'after') toIdx += 1;
+      items.splice(toIdx, 0, removed);
+      return { ...state, items };
+    }
+    case 'TOGGLE_CONTAINER':
+      return {
+        ...state,
+        categories: state.categories.map(c =>
+          c.id === action.id ? { ...c, isContainer: !c.isContainer, packed: false } : c
+        ),
+      };
+    case 'TOGGLE_CONTAINER_PACKED':
+      return {
+        ...state,
+        categories: state.categories.map(c =>
+          c.id === action.id ? { ...c, packed: !c.packed } : c
+        ),
+      };
     case 'CLEAR_CHECKS':
       return {
         ...state,
         items: state.items.map(i => ({ ...i, checked: false })),
+        categories: state.categories.map(c => ({ ...c, packed: false })),
       };
     case 'SET_TAB':
       return { ...state, activeTab: action.tab };
@@ -106,6 +145,7 @@ function reducer(state: AppState, action: Action): AppState {
         items: state.items.map(i =>
           i.location === 'packing' ? { ...i, location: 'inventory', checked: false } : i
         ),
+        categories: state.categories.map(c => ({ ...c, packed: false })),
       };
     case 'REPLACE_STATE':
       // Preserve local UI tab selection; replace all data from remote
@@ -118,7 +158,19 @@ function reducer(state: AppState, action: Action): AppState {
 function loadState(): AppState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw) as AppState;
+    if (raw) {
+      const parsed = JSON.parse(raw) as AppState;
+      // Migrate: add defaults for fields added after initial release
+      type LegacyCat = Omit<Category, 'isContainer' | 'packed'> & Partial<Pick<Category, 'isContainer' | 'packed'>>;
+      return {
+        ...parsed,
+        categories: (parsed.categories as LegacyCat[]).map(c => ({
+          isContainer: false,
+          packed: false,
+          ...c,
+        })),
+      };
+    }
   } catch { /* ignore */ }
   return defaultState;
 }
