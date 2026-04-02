@@ -13,6 +13,8 @@ export interface Category {
   name: string;
   parentId: string | null;
   collapsed: boolean;
+  isContainer: boolean;
+  packed: boolean;
 }
 
 export interface AppState {
@@ -31,6 +33,10 @@ export type Action =
   | { type: 'DELETE_CATEGORY'; id: string }
   | { type: 'TOGGLE_COLLAPSE'; id: string }
   | { type: 'RENAME_CATEGORY'; id: string; name: string }
+  | { type: 'REORDER_CATEGORY'; id: string; targetId: string; position: 'before' | 'after' }
+  | { type: 'REORDER_ITEM'; id: string; targetId: string; position: 'before' | 'after' }
+  | { type: 'TOGGLE_CONTAINER'; id: string }
+  | { type: 'TOGGLE_CONTAINER_PACKED'; id: string }
   | { type: 'CLEAR_CHECKS' }
   | { type: 'SET_TAB'; tab: Location }
   | { type: 'NEW_TRIP' }
