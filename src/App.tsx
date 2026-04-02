@@ -98,13 +98,14 @@ function getSubtreeItemCount(
   categories: Category[],
   items: Item[],
   catId: string,
+  location: Location,
 ): number {
   const childIds = categories
     .filter(c => c.parentId === catId)
     .map(c => c.id);
-  const direct = items.filter(i => i.categoryId === catId).length;
+  const direct = items.filter(i => i.categoryId === catId && i.location === location).length;
   const nested = childIds.reduce(
-    (sum, id) => sum + getSubtreeItemCount(categories, items, id),
+    (sum, id) => sum + getSubtreeItemCount(categories, items, id, location),
     0,
   );
   return direct + nested;
@@ -133,7 +134,7 @@ function CategoryTree({
   const catItems = items.filter(
     i => i.categoryId === category.id && i.location === viewLocation,
   );
-  const subtreeCount = getSubtreeItemCount(allCategories, items, category.id);
+  const subtreeCount = getSubtreeItemCount(allCategories, items, category.id, viewLocation);
 
   if (viewLocation === 'packing' && !hasPackingItems(allCategories, items, category.id)) {
     return null;
