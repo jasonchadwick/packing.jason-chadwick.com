@@ -10,6 +10,7 @@ import {
   setOfflineOnly,
   fetchRemoteState,
   schedulePush,
+  cancelPush,
 } from './syncClient';
 import { PasscodeModal } from './PasscodeModal';
 
@@ -505,7 +506,10 @@ export default function App() {
     fetchRemoteState(listId)
       .then(remote => {
         if (remote) {
-          // Replace local state with remote; suppress the resulting push
+          // Cancel any push that was speculatively scheduled before the remote
+          // state arrived (e.g. an empty-state push triggered by the listId
+          // change), then replace local state with the authoritative remote copy.
+          cancelPush();
           isRemoteLoad.current = true;
           dispatch({ type: 'REPLACE_STATE', state: remote });
           setSyncStatus('synced');
