@@ -4,3 +4,8 @@ compatibility_date = "2025-01-01"
 [assets]
 directory = "./dist"
 not_found_handling = "single-page-application"
+
+[[kv_namespaces]]
+binding = "LISTS"
+id = "160a4326ef694f8280f2917e63342247"
+preview_id = "7b27766149694e428167ca93df7c0e8c"
