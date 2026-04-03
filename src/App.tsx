@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, createContext, useContext, useMemo } from 'react';
 import { useStore } from './useStore';
-import type { Category, Item, Location } from './types';
+import type { Category, Item, Location, PackingList } from './types';
 import type { Action } from './types';
 import type { SyncStatus } from './syncClient';
 import {
@@ -75,7 +75,7 @@ function DragProvider({
       if (
         !draggedItem || !targetItem ||
         draggedItem.categoryId !== targetItem.categoryId ||
-        draggedItem.location !== targetItem.location
+        draggedItem.packingListId !== targetItem.packingListId
       ) return;
     }
 
@@ -202,6 +202,7 @@ interface CategoryTreeProps {
   items: Item[];
   depth: number;
   viewLocation: Location;
+  activePackingListId: string | null;
   dispatch: React.Dispatch<Action>;
 }
 
@@ -210,13 +211,19 @@ function getSubtreeItemCount(
   items: Item[],
   catId: string,
   location: Location,
+  activePackingListId?: string | null,
 ): number {
   const childIds = categories
     .filter(c => c.parentId === catId)
     .map(c => c.id);
-  const direct = items.filter(i => i.categoryId === catId && i.location === location).length;
+  const direct = items.filter(i =>
+    i.categoryId === catId &&
+    (location === 'packing'
+      ? i.packingListId === activePackingListId
+      : i.packingListId === null),
+  ).length;
   const nested = childIds.reduce(
-    (sum, id) => sum + getSubtreeItemCount(categories, items, id, location),
+    (sum, id) => sum + getSubtreeItemCount(categories, items, id, location, activePackingListId),
     0,
   );
   return direct + nested;
@@ -226,13 +233,12 @@ function hasPackingContent(
   categories: Category[],
   items: Item[],
   catId: string,
+  activePackingListId: string | null,
 ): boolean {
-  const cat = categories.find(c => c.id === catId);
-  if (cat?.isContainer) return true;
-  if (items.some(i => i.categoryId === catId && i.location === 'packing')) return true;
+  if (items.some(i => i.categoryId === catId && i.packingListId === activePackingListId)) return true;
   return categories
     .filter(c => c.parentId === catId)
-    .some(c => hasPackingContent(categories, items, c.id));
+    .some(c => hasPackingContent(categories, items, c.id, activePackingListId));
 }
 
 function CategoryTree({
@@ -241,6 +247,7 @@ function CategoryTree({
   items,
   depth,
   viewLocation,
+  activePackingListId,
   dispatch,
 }: CategoryTreeProps) {
   const dragCtx = useContext(DragContext)!;
@@ -249,11 +256,16 @@ function CategoryTree({
 
   const children = allCategories.filter(c => c.parentId === category.id);
   const catItems = items.filter(
-    i => i.categoryId === category.id && i.location === viewLocation,
+    i => i.categoryId === category.id &&
+      (viewLocation === 'packing'
+        ? i.packingListId === activePackingListId
+        : i.packingListId === null),
   );
-  const subtreeCount = getSubtreeItemCount(allCategories, items, category.id, viewLocation);
+  const subtreeCount = getSubtreeItemCount(
+    allCategories, items, category.id, viewLocation, activePackingListId,
+  );
 
-  if (viewLocation === 'packing' && !hasPackingContent(allCategories, items, category.id)) {
+  if (viewLocation === 'packing' && !hasPackingContent(allCategories, items, category.id, activePackingListId)) {
     return null;
   }
 
@@ -338,6 +350,7 @@ function CategoryTree({
               key={item.id}
               item={item}
               viewLocation={viewLocation}
+              activePackingListId={activePackingListId}
               dispatch={dispatch}
             />
           ))}
@@ -350,6 +363,7 @@ function CategoryTree({
               items={items}
               depth={depth + 1}
               viewLocation={viewLocation}
+              activePackingListId={activePackingListId}
               dispatch={dispatch}
             />
           ))}
@@ -357,7 +371,12 @@ function CategoryTree({
           <AddForm
             placeholder="Add item here…"
             onAdd={name =>
-              dispatch({ type: 'ADD_ITEM', name, categoryId: category.id, location: viewLocation })
+              dispatch({
+                type: 'ADD_ITEM',
+                name,
+                categoryId: category.id,
+                packingListId: viewLocation === 'packing' ? activePackingListId : null,
+              })
             }
             className="cat-add-item"
           />
@@ -382,10 +401,11 @@ function CategoryTree({
 interface ItemRowProps {
   item: Item;
   viewLocation: Location;
+  activePackingListId: string | null;
   dispatch: React.Dispatch<Action>;
 }
 
-function ItemRow({ item, viewLocation, dispatch }: ItemRowProps) {
+function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowProps) {
   const dragCtx = useContext(DragContext)!;
   const rowRef = useRef<HTMLDivElement>(null);
   const isDragHandleActive = useRef(false);
@@ -434,7 +454,7 @@ function ItemRow({ item, viewLocation, dispatch }: ItemRowProps) {
         {viewLocation === 'packing' ? (
           <button
             className="btn-move"
-            onClick={() => dispatch({ type: 'MOVE_ITEM', id: item.id, to: 'inventory' })}
+            onClick={() => dispatch({ type: 'MOVE_ITEM', id: item.id, packingListId: null })}
             title="Move to inventory"
           >
             ↩
@@ -442,19 +462,21 @@ function ItemRow({ item, viewLocation, dispatch }: ItemRowProps) {
         ) : (
           <button
             className="btn-move pack"
-            onClick={() => dispatch({ type: 'MOVE_ITEM', id: item.id, to: 'packing' })}
+            onClick={() => dispatch({ type: 'MOVE_ITEM', id: item.id, packingListId: activePackingListId })}
             title="Add to packing list"
           >
             Pack →
           </button>
         )}
-        <button
-          className="btn-icon danger"
-          onClick={() => dispatch({ type: 'DELETE_ITEM', id: item.id })}
-          aria-label="Delete item"
-        >
-          ✕
-        </button>
+        {viewLocation === 'inventory' && (
+          <button
+            className="btn-icon danger"
+            onClick={() => dispatch({ type: 'DELETE_ITEM', id: item.id })}
+            aria-label="Delete item"
+          >
+            ✕
+          </button>
+        )}
       </div>
     </div>
   );
@@ -465,18 +487,90 @@ function ItemRow({ item, viewLocation, dispatch }: ItemRowProps) {
 interface ViewProps {
   categories: Category[];
   items: Item[];
+  activePackingListId: string | null;
   dispatch: React.Dispatch<Action>;
 }
 
-function PackingView({ categories, items, dispatch }: ViewProps) {
+interface PackingViewProps extends ViewProps {
+  packingLists: PackingList[];
+}
+
+// ── PackingListBar ─────────────────────────────────────────────────────────────
+
+function PackingListBar({
+  packingLists,
+  activePackingListId,
+  dispatch,
+}: {
+  packingLists: PackingList[];
+  activePackingListId: string | null;
+  dispatch: React.Dispatch<Action>;
+}) {
+  function handleAdd() {
+    const name = window.prompt('New packing list name:');
+    if (name?.trim()) dispatch({ type: 'ADD_PACKING_LIST', name: name.trim() });
+  }
+
+  function handleRename() {
+    if (!activePackingListId) return;
+    const list = packingLists.find(l => l.id === activePackingListId);
+    if (!list) return;
+    const name = window.prompt('Rename list:', list.name);
+    if (name?.trim() && name.trim() !== list.name) {
+      dispatch({ type: 'RENAME_PACKING_LIST', id: activePackingListId, name: name.trim() });
+    }
+  }
+
+  function handleDelete() {
+    if (!activePackingListId || packingLists.length <= 1) return;
+    const list = packingLists.find(l => l.id === activePackingListId);
+    if (!list) return;
+    if (window.confirm(`Delete packing list "${list.name}"? Items will be moved back to inventory.`)) {
+      dispatch({ type: 'DELETE_PACKING_LIST', id: activePackingListId });
+    }
+  }
+
+  return (
+    <div className="list-bar">
+      <span className="selector-label">List</span>
+      <select
+        value={activePackingListId ?? ''}
+        onChange={e => dispatch({ type: 'SELECT_PACKING_LIST', id: e.target.value })}
+        className="selector-select"
+      >
+        {packingLists.map(list => (
+          <option key={list.id} value={list.id}>{list.name}</option>
+        ))}
+      </select>
+      <button className="btn-icon" onClick={handleRename} title="Rename list">✏</button>
+      <button className="btn-icon" onClick={handleAdd} title="Add list">+</button>
+      <button
+        className="btn-icon danger"
+        onClick={handleDelete}
+        disabled={packingLists.length <= 1}
+        title="Delete list"
+      >✕</button>
+    </div>
+  );
+}
+
+// ── PackingView ───────────────────────────────────────────────────────────────
+
+function PackingView({ categories, items, activePackingListId, packingLists, dispatch }: PackingViewProps) {
   const rootCategories = categories.filter(c => c.parentId === null);
   const uncategorized = items.filter(
-    i => i.location === 'packing' && i.categoryId === null,
+    i => i.packingListId === activePackingListId && i.categoryId === null,
   );
 
   return (
     <DragProvider categories={categories} items={items} dispatch={dispatch}>
       <div className="view">
+        <PackingListBar
+          packingLists={packingLists}
+          activePackingListId={activePackingListId}
+          dispatch={dispatch}
+        />
+
         {rootCategories.map(cat => (
           <CategoryTree
             key={cat.id}
@@ -485,6 +579,7 @@ function PackingView({ categories, items, dispatch }: ViewProps) {
             items={items}
             depth={0}
             viewLocation="packing"
+            activePackingListId={activePackingListId}
             dispatch={dispatch}
           />
         ))}
@@ -500,6 +595,7 @@ function PackingView({ categories, items, dispatch }: ViewProps) {
                   key={item.id}
                   item={item}
                   viewLocation="packing"
+                  activePackingListId={activePackingListId}
                   dispatch={dispatch}
                 />
               ))}
@@ -510,7 +606,7 @@ function PackingView({ categories, items, dispatch }: ViewProps) {
         <AddForm
           placeholder="Add item to packing list…"
           onAdd={name =>
-            dispatch({ type: 'ADD_ITEM', name, categoryId: null, location: 'packing' })
+            dispatch({ type: 'ADD_ITEM', name, categoryId: null, packingListId: activePackingListId })
           }
           className="root-add"
         />
@@ -526,10 +622,10 @@ function PackingView({ categories, items, dispatch }: ViewProps) {
 
 // ── InventoryView ─────────────────────────────────────────────────────────────
 
-function InventoryView({ categories, items, dispatch }: ViewProps) {
+function InventoryView({ categories, items, activePackingListId, dispatch }: ViewProps) {
   const rootCategories = categories.filter(c => c.parentId === null);
   const uncategorized = items.filter(
-    i => i.location === 'inventory' && i.categoryId === null,
+    i => i.packingListId === null && i.categoryId === null,
   );
 
   return (
@@ -543,6 +639,7 @@ function InventoryView({ categories, items, dispatch }: ViewProps) {
             items={items}
             depth={0}
             viewLocation="inventory"
+            activePackingListId={activePackingListId}
             dispatch={dispatch}
           />
         ))}
@@ -558,13 +655,14 @@ function InventoryView({ categories, items, dispatch }: ViewProps) {
                   key={item.id}
                   item={item}
                   viewLocation="inventory"
+                  activePackingListId={activePackingListId}
                   dispatch={dispatch}
                 />
               ))}
               <AddForm
                 placeholder="Add item here…"
                 onAdd={name =>
-                  dispatch({ type: 'ADD_ITEM', name, categoryId: null, location: 'inventory' })
+                  dispatch({ type: 'ADD_ITEM', name, categoryId: null, packingListId: null })
                 }
                 className="cat-add-item"
               />
@@ -575,7 +673,7 @@ function InventoryView({ categories, items, dispatch }: ViewProps) {
         <AddForm
           placeholder="Add item to inventory…"
           onAdd={name =>
-            dispatch({ type: 'ADD_ITEM', name, categoryId: null, location: 'inventory' })
+            dispatch({ type: 'ADD_ITEM', name, categoryId: null, packingListId: null })
           }
           className="root-add"
         />
@@ -586,6 +684,64 @@ function InventoryView({ categories, items, dispatch }: ViewProps) {
         />
       </div>
     </DragProvider>
+  );
+}
+
+// ── InventoryBar ──────────────────────────────────────────────────────────────
+
+function InventoryBar({
+  inventories,
+  activeInventoryId,
+  dispatch,
+}: {
+  inventories: { id: string; name: string }[];
+  activeInventoryId: string;
+  dispatch: React.Dispatch<Action>;
+}) {
+  function handleAdd() {
+    const name = window.prompt('New inventory name:');
+    if (name?.trim()) dispatch({ type: 'ADD_INVENTORY', name: name.trim() });
+  }
+
+  function handleRename() {
+    const inv = inventories.find(i => i.id === activeInventoryId);
+    if (!inv) return;
+    const name = window.prompt('Rename inventory:', inv.name);
+    if (name?.trim() && name.trim() !== inv.name) {
+      dispatch({ type: 'RENAME_INVENTORY', id: activeInventoryId, name: name.trim() });
+    }
+  }
+
+  function handleDelete() {
+    if (inventories.length <= 1) return;
+    const inv = inventories.find(i => i.id === activeInventoryId);
+    if (!inv) return;
+    if (window.confirm(`Delete inventory "${inv.name}" and all its contents?`)) {
+      dispatch({ type: 'DELETE_INVENTORY', id: activeInventoryId });
+    }
+  }
+
+  return (
+    <div className="inventory-bar">
+      <span className="selector-label">Inventory</span>
+      <select
+        value={activeInventoryId}
+        onChange={e => dispatch({ type: 'SELECT_INVENTORY', id: e.target.value })}
+        className="selector-select"
+      >
+        {inventories.map(inv => (
+          <option key={inv.id} value={inv.id}>{inv.name}</option>
+        ))}
+      </select>
+      <button className="btn-icon" onClick={handleRename} title="Rename inventory">✏</button>
+      <button className="btn-icon" onClick={handleAdd} title="Add inventory">+</button>
+      <button
+        className="btn-icon danger"
+        onClick={handleDelete}
+        disabled={inventories.length <= 1}
+        title="Delete inventory"
+      >✕</button>
+    </div>
   );
 }
 
@@ -744,6 +900,14 @@ export default function App() {
     dispatch({ type: 'CLEAR_CHECKS' });
   }, [dispatch]);
 
+  // ── Active inventory data ────────────────────────────────────────────────────
+
+  const activeInventory = state.inventories.find(inv => inv.id === state.activeInventoryId);
+  const categories = activeInventory?.categories ?? [];
+  const items = activeInventory?.items ?? [];
+  const packingLists = activeInventory?.packingLists ?? [];
+  const activePackingListId = activeInventory?.activePackingListId ?? null;
+
   return (
     <div className="app">
       <Header
@@ -756,17 +920,25 @@ export default function App() {
         active={state.activeTab}
         onChange={tab => dispatch({ type: 'SET_TAB', tab })}
       />
+      <InventoryBar
+        inventories={state.inventories}
+        activeInventoryId={state.activeInventoryId}
+        dispatch={dispatch}
+      />
       <main className="app-main">
         {state.activeTab === 'packing' ? (
           <PackingView
-            categories={state.categories}
-            items={state.items}
+            categories={categories}
+            items={items}
+            activePackingListId={activePackingListId}
+            packingLists={packingLists}
             dispatch={dispatch}
           />
         ) : (
           <InventoryView
-            categories={state.categories}
-            items={state.items}
+            categories={categories}
+            items={items}
+            activePackingListId={activePackingListId}
             dispatch={dispatch}
           />
         )}

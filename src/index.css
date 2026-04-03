@@ -463,6 +463,55 @@ input {
   color: var(--color-checked-text);
 }
 
+/* ── Inventory / List Selector Bars ─────────────────────────────────────────── */
+.inventory-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  background: #edf7f2; /* fallback */
+  background: color-mix(in srgb, var(--color-primary) 6%, var(--color-surface));
+  border-bottom: 1px solid var(--color-border);
+}
+
+.list-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  margin: 6px 4px 4px;
+  background: #f6fdf9; /* fallback */
+  background: color-mix(in srgb, var(--color-secondary) 8%, var(--color-surface));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.selector-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.selector-select {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: 0.88rem;
+  font-weight: 500;
+  outline: none;
+  cursor: pointer;
+}
+.selector-select:focus {
+  border-color: var(--color-primary);
+}
+
 /* ── Scrollbar ───────────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar {
   width: 6px;

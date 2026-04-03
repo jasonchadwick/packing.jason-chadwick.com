@@ -5,7 +5,8 @@ export interface Item {
   name: string;
   checked: boolean;
   categoryId: string | null;
-  location: Location;
+  /** null = in inventory; non-null = id of the packing list this item belongs to */
+  packingListId: string | null;
 }
 
 export interface Category {
@@ -17,17 +18,31 @@ export interface Category {
   packed: boolean;
 }
 
-export interface AppState {
-  items: Item[];
+export interface PackingList {
+  id: string;
+  name: string;
+}
+
+export interface Inventory {
+  id: string;
+  name: string;
   categories: Category[];
+  items: Item[];
+  packingLists: PackingList[];
+  activePackingListId: string | null;
+}
+
+export interface AppState {
+  inventories: Inventory[];
+  activeInventoryId: string;
   activeTab: Location;
 }
 
 export type Action =
-  | { type: 'ADD_ITEM'; name: string; categoryId: string | null; location: Location }
+  | { type: 'ADD_ITEM'; name: string; categoryId: string | null; packingListId: string | null }
   | { type: 'DELETE_ITEM'; id: string }
   | { type: 'TOGGLE_CHECK'; id: string }
-  | { type: 'MOVE_ITEM'; id: string; to: Location }
+  | { type: 'MOVE_ITEM'; id: string; packingListId: string | null }
   | { type: 'RENAME_ITEM'; id: string; name: string }
   | { type: 'ADD_CATEGORY'; name: string; parentId: string | null }
   | { type: 'DELETE_CATEGORY'; id: string }
@@ -40,4 +55,12 @@ export type Action =
   | { type: 'CLEAR_CHECKS' }
   | { type: 'SET_TAB'; tab: Location }
   | { type: 'NEW_TRIP' }
+  | { type: 'ADD_INVENTORY'; name: string }
+  | { type: 'DELETE_INVENTORY'; id: string }
+  | { type: 'RENAME_INVENTORY'; id: string; name: string }
+  | { type: 'SELECT_INVENTORY'; id: string }
+  | { type: 'ADD_PACKING_LIST'; name: string }
+  | { type: 'DELETE_PACKING_LIST'; id: string }
+  | { type: 'RENAME_PACKING_LIST'; id: string; name: string }
+  | { type: 'SELECT_PACKING_LIST'; id: string }
   | { type: 'REPLACE_STATE'; state: AppState };
