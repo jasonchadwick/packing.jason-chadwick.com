@@ -499,12 +499,13 @@ function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowP
           <button
             className={`btn-move pack${item.packingListId !== null ? ' packed-out' : ''}`}
             onClick={() => {
-              if (item.packingListId === null) {
+              if (item.packingListId !== null) {
+                dispatch({ type: 'MOVE_ITEM', id: item.id, packingListId: null });
+              } else {
                 dispatch({ type: 'MOVE_ITEM', id: item.id, packingListId: activePackingListId });
               }
             }}
-            disabled={item.packingListId !== null}
-            title={item.packingListId !== null ? 'Already in packing list' : 'Add to packing list'}
+            title={item.packingListId !== null ? 'Remove from packing list' : 'Add to packing list'}
           >
             {item.packingListId !== null ? '✓ Packed' : 'Pack →'}
           </button>
