@@ -50,6 +50,7 @@ export type Action =
   | { type: 'RENAME_CATEGORY'; id: string; name: string }
   | { type: 'REORDER_CATEGORY'; id: string; targetId: string; position: 'before' | 'after' }
   | { type: 'REORDER_ITEM'; id: string; targetId: string; position: 'before' | 'after' }
+  | { type: 'MOVE_CATEGORY'; id: string; packingListId: string | null }
   | { type: 'TOGGLE_CONTAINER'; id: string }
   | { type: 'TOGGLE_CONTAINER_PACKED'; id: string }
   | { type: 'CLEAR_CHECKS' }

@@ -322,6 +322,28 @@ function CategoryTree({
         {viewLocation === 'inventory' && subtreeCount > 0 && (
           <span className="badge">{subtreeCount}</span>
         )}
+        {viewLocation === 'inventory' && subtreeCount > 0 && (
+          <button
+            className="btn-move pack"
+            onClick={() =>
+              dispatch({ type: 'MOVE_CATEGORY', id: category.id, packingListId: activePackingListId })
+            }
+            title="Add all items to packing list"
+          >
+            Pack →
+          </button>
+        )}
+        {viewLocation === 'packing' && (
+          <button
+            className="btn-move"
+            onClick={() =>
+              dispatch({ type: 'MOVE_CATEGORY', id: category.id, packingListId: null })
+            }
+            title="Remove all items from packing list"
+          >
+            ↩
+          </button>
+        )}
         <button
           className={`btn-icon container-toggle${category.isContainer ? ' active' : ''}`}
           onClick={() => dispatch({ type: 'TOGGLE_CONTAINER', id: category.id })}

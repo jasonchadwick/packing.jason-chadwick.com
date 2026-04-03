@@ -144,6 +144,19 @@ function reducer(state: AppState, action: Action): AppState {
         return { ...inv, items };
       });
     }
+    case 'MOVE_CATEGORY': {
+      return updateActiveInventory(state, inv => {
+        const subtreeCatIds = new Set(getSubtreeIds(inv.categories, action.id));
+        return {
+          ...inv,
+          items: inv.items.map(i =>
+            i.categoryId !== null && subtreeCatIds.has(i.categoryId)
+              ? { ...i, packingListId: action.packingListId, checked: false }
+              : i,
+          ),
+        };
+      });
+    }
     case 'TOGGLE_CONTAINER':
       return updateActiveInventory(state, inv => ({
         ...inv,
@@ -151,13 +164,28 @@ function reducer(state: AppState, action: Action): AppState {
           c.id === action.id ? { ...c, isContainer: !c.isContainer, packed: false } : c,
         ),
       }));
-    case 'TOGGLE_CONTAINER_PACKED':
+    case 'TOGGLE_CONTAINER_PACKED': {
+      const activeInv = getActiveInventory(state);
+      if (!activeInv) return state;
+      const listId = activeInv.activePackingListId;
+      const cat = activeInv.categories.find(c => c.id === action.id);
+      if (!cat) return state;
+      const newPacked = !cat.packed;
+      const subtreeCatIds = new Set(getSubtreeIds(activeInv.categories, action.id));
       return updateActiveInventory(state, inv => ({
         ...inv,
         categories: inv.categories.map(c =>
-          c.id === action.id ? { ...c, packed: !c.packed } : c,
+          c.id === action.id ? { ...c, packed: newPacked } : c,
+        ),
+        items: inv.items.map(i =>
+          i.categoryId !== null &&
+          subtreeCatIds.has(i.categoryId) &&
+          i.packingListId === listId
+            ? { ...i, checked: newPacked }
+            : i,
         ),
       }));
+    }
     case 'CLEAR_CHECKS': {
       const activeInv = getActiveInventory(state);
       if (!activeInv) return state;
