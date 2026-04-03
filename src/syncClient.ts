@@ -1,4 +1,6 @@
 import type { AppState } from './types';
+import { migrateState } from './migrate';
+import type { RawState } from './migrate';
 
 const LIST_ID_KEY = 'packing-list-id';         // stored value is the SHA-256 hash
 const OFFLINE_FLAG_KEY = 'packing-list-offline-only';
@@ -55,12 +57,8 @@ export async function fetchRemoteState(listId: string): Promise<AppState | null>
   const res = await fetch(`/api/list/${listId}`);
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const data = await res.json() as Partial<AppState>;
-  return {
-    items: data.items ?? [],
-    categories: data.categories ?? [],
-    activeTab: data.activeTab ?? 'packing',
-  };
+  const data = await res.json() as RawState;
+  return migrateState(data);
 }
 
 /** Pushes the current list state to the remote. */
@@ -68,7 +66,7 @@ export async function pushState(listId: string, state: AppState): Promise<void> 
   const res = await fetch(`/api/list/${listId}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ items: state.items, categories: state.categories }),
+    body: JSON.stringify({ inventories: state.inventories }),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
 }
