@@ -277,10 +277,12 @@ function CategoryTree({
       ref={blockRef}
       className={`category-block${isDragging ? ' is-dragging' : ''}${dropPos ? ` drop-${dropPos}` : ''}`}
       style={{ '--depth': depth } as React.CSSProperties}
-      onDragOver={e => dragCtx.onDragOver(e, category.id, 'category')}
-      onDrop={e => dragCtx.onDrop(e, category.id, 'category')}
     >
-      <div className="category-header">
+      <div
+        className="category-header"
+        onDragOver={e => dragCtx.onDragOver(e, category.id, 'category')}
+        onDrop={e => dragCtx.onDrop(e, category.id, 'category')}
+      >
         <span
           className="drag-handle"
           draggable
