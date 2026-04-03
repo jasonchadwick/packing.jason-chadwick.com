@@ -28,10 +28,10 @@ function jsonResponse(body: unknown, status: number): Response {
   });
 }
 
-function isValidPayload(data: unknown): data is { items: unknown[]; categories: unknown[] } {
+function isValidPayload(data: unknown): data is { inventories: unknown[] } {
   if (typeof data !== 'object' || data === null) return false;
   const d = data as Record<string, unknown>;
-  return Array.isArray(d.items) && Array.isArray(d.categories);
+  return Array.isArray(d.inventories);
 }
 
 export default {
