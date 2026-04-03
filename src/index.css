@@ -590,7 +590,7 @@ input {
 .btn-sync {
   padding: 6px 8px;
   border-radius: var(--radius-sm);
-  font-size: 1rem;
+  font-size: 1.25rem;
   line-height: 1;
   color: rgba(255, 255, 255, 0.55);
   transition: color 0.15s, background 0.15s;
