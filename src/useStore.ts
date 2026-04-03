@@ -23,6 +23,24 @@ const defaultState: AppState = {
   activeTab: 'packing',
 };
 
+type LegacyCat = Omit<Category, 'isContainer' | 'packed'> & Partial<Pick<Category, 'isContainer' | 'packed'>>;
+type LegacyItem = Omit<Item, 'count'> & Partial<Pick<Item, 'count'>>;
+
+function migrateState(parsed: AppState): AppState {
+  return {
+    ...parsed,
+    categories: (parsed.categories as LegacyCat[]).map(c => ({
+      isContainer: false,
+      packed: false,
+      ...c,
+    })),
+    items: (parsed.items as LegacyItem[]).map(i => ({
+      count: 1,
+      ...i,
+    })),
+  };
+}
+
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case 'ADD_ITEM': {
@@ -30,6 +48,7 @@ function reducer(state: AppState, action: Action): AppState {
         id: generateId(),
         name: action.name.trim(),
         checked: false,
+        count: 1,
         categoryId: action.categoryId,
         location: action.location,
       };
@@ -131,6 +150,13 @@ function reducer(state: AppState, action: Action): AppState {
           c.id === action.id ? { ...c, packed: !c.packed } : c
         ),
       };
+    case 'SET_ITEM_COUNT':
+      return {
+        ...state,
+        items: state.items.map(i =>
+          i.id === action.id ? { ...i, count: Number.isFinite(action.count) ? Math.max(1, action.count) : 1 } : i
+        ),
+      };
     case 'CLEAR_CHECKS':
       return {
         ...state,
@@ -149,7 +175,7 @@ function reducer(state: AppState, action: Action): AppState {
       };
     case 'REPLACE_STATE':
       // Preserve local UI tab selection; replace all data from remote
-      return { ...action.state, activeTab: state.activeTab };
+      return { ...migrateState(action.state), activeTab: state.activeTab };
     default:
       return state;
   }
@@ -159,17 +185,7 @@ function loadState(): AppState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
-      const parsed = JSON.parse(raw) as AppState;
-      // Migrate: add defaults for fields added after initial release
-      type LegacyCat = Omit<Category, 'isContainer' | 'packed'> & Partial<Pick<Category, 'isContainer' | 'packed'>>;
-      return {
-        ...parsed,
-        categories: (parsed.categories as LegacyCat[]).map(c => ({
-          isContainer: false,
-          packed: false,
-          ...c,
-        })),
-      };
+      return migrateState(JSON.parse(raw) as AppState);
     }
   } catch { /* ignore */ }
   return defaultState;
