@@ -42,6 +42,7 @@ function reducer(state: AppState, action: Action): AppState {
         id: generateId(),
         name: action.name.trim(),
         checked: false,
+        count: 1,
         categoryId: action.categoryId,
         packingListId: action.packingListId,
       };
@@ -186,6 +187,15 @@ function reducer(state: AppState, action: Action): AppState {
         ),
       }));
     }
+    case 'SET_ITEM_COUNT':
+      return updateActiveInventory(state, inv => ({
+        ...inv,
+        items: inv.items.map(i =>
+          i.id === action.id
+            ? { ...i, count: Number.isFinite(action.count) ? Math.max(1, action.count) : 1 }
+            : i,
+        ),
+      }));
     case 'CLEAR_CHECKS': {
       const activeInv = getActiveInventory(state);
       if (!activeInv) return state;

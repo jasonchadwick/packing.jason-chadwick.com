@@ -512,6 +512,48 @@ input {
   border-color: var(--color-primary);
 }
 
+/* ── Item Count ──────────────────────────────────────────────────────────────── */
+.item-count {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  opacity: 0.35;
+  transition: opacity 0.15s;
+}
+.item-row:hover .item-count,
+.item-count:focus-within {
+  opacity: 1;
+}
+.item-count .count-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  font-size: 1rem;
+  line-height: 1;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+.item-count .count-btn:hover:not(:disabled) {
+  background: var(--color-bg);
+  color: var(--color-primary);
+}
+.item-count .count-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.item-count .count-value {
+  min-width: 18px;
+  text-align: center;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
 /* ── Scrollbar ───────────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar {
   width: 6px;

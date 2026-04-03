@@ -4,6 +4,7 @@ export interface Item {
   id: string;
   name: string;
   checked: boolean;
+  count: number;
   categoryId: string | null;
   /** null = in inventory; non-null = id of the packing list this item belongs to */
   packingListId: string | null;
@@ -54,6 +55,7 @@ export type Action =
   | { type: 'TOGGLE_CONTAINER'; id: string }
   | { type: 'TOGGLE_CONTAINER_PACKED'; id: string }
   | { type: 'CLEAR_CHECKS' }
+  | { type: 'SET_ITEM_COUNT'; id: string; count: number }
   | { type: 'SET_TAB'; tab: Location }
   | { type: 'NEW_TRIP' }
   | { type: 'ADD_INVENTORY'; name: string }

@@ -472,6 +472,20 @@ function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowP
         onSave={name => dispatch({ type: 'RENAME_ITEM', id: item.id, name })}
         className="item-name"
       />
+      <div className="item-count">
+        <button
+          className="count-btn"
+          onClick={() => dispatch({ type: 'SET_ITEM_COUNT', id: item.id, count: item.count - 1 })}
+          aria-label="Decrease count"
+          disabled={item.count <= 1}
+        >−</button>
+        <span className="count-value">{item.count}</span>
+        <button
+          className="count-btn"
+          onClick={() => dispatch({ type: 'SET_ITEM_COUNT', id: item.id, count: item.count + 1 })}
+          aria-label="Increase count"
+        >+</button>
+      </div>
       <div className="item-actions">
         {viewLocation === 'packing' ? (
           <button

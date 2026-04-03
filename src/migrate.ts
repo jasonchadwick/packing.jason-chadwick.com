@@ -11,6 +11,7 @@ type LegacyItem = {
   categoryId: string | null;
   location?: 'packing' | 'inventory';
   packingListId?: string | null;
+  count?: number;
 };
 
 type LegacyCat = Omit<Category, 'isContainer' | 'packed'> &
@@ -29,7 +30,12 @@ export type RawState = {
 export function migrateState(raw: RawState): AppState {
   if (raw.inventories && raw.inventories.length > 0) {
     return {
-      inventories: raw.inventories,
+      inventories: raw.inventories.map(inv => ({
+        ...inv,
+      items: (inv.items as (Omit<Item, 'count'> & { count?: number })[]).map(
+        i => ({ count: 1, ...i }),
+      ),
+      })),
       activeInventoryId: raw.activeInventoryId ?? raw.inventories[0].id,
       activeTab: raw.activeTab ?? 'packing',
     };
@@ -48,6 +54,7 @@ export function migrateState(raw: RawState): AppState {
     id: i.id,
     name: i.name,
     checked: i.checked,
+    count: i.count ?? 1,
     categoryId: i.categoryId,
     packingListId:
       i.packingListId !== undefined
