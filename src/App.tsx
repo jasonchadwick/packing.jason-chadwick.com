@@ -259,7 +259,7 @@ function CategoryTree({
     i => i.categoryId === category.id &&
       (viewLocation === 'packing'
         ? i.packingListId === activePackingListId
-        : i.packingListId === null),
+        : true), // inventory: show all items (packed and unpacked) so nothing is hidden
   );
   const subtreeCount = getSubtreeItemCount(
     allCategories, items, category.id, viewLocation, activePackingListId,
@@ -438,7 +438,7 @@ function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowP
   return (
     <div
       ref={rowRef}
-      className={`item-row${item.checked ? ' checked' : ''}${isDragging ? ' is-dragging' : ''}${dropPos ? ` drop-${dropPos}` : ''}`}
+      className={`item-row${item.checked ? ' checked' : ''}${isDragging ? ' is-dragging' : ''}${dropPos ? ` drop-${dropPos}` : ''}${viewLocation === 'inventory' && item.packingListId !== null ? ' in-packing' : ''}`}
       onDragOver={e => dragCtx.onDragOver(e, item.id, 'item')}
       onDrop={e => dragCtx.onDrop(e, item.id, 'item')}
     >
@@ -497,11 +497,16 @@ function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowP
           </button>
         ) : (
           <button
-            className="btn-move pack"
-            onClick={() => dispatch({ type: 'MOVE_ITEM', id: item.id, packingListId: activePackingListId })}
-            title="Add to packing list"
+            className={`btn-move pack${item.packingListId !== null ? ' packed-out' : ''}`}
+            onClick={() => {
+              if (item.packingListId === null) {
+                dispatch({ type: 'MOVE_ITEM', id: item.id, packingListId: activePackingListId });
+              }
+            }}
+            disabled={item.packingListId !== null}
+            title={item.packingListId !== null ? 'Already in packing list' : 'Add to packing list'}
           >
-            Pack →
+            {item.packingListId !== null ? '✓ Packed' : 'Pack →'}
           </button>
         )}
         {viewLocation === 'inventory' && (
@@ -661,7 +666,7 @@ function PackingView({ categories, items, activePackingListId, packingLists, dis
 function InventoryView({ categories, items, activePackingListId, dispatch }: ViewProps) {
   const rootCategories = categories.filter(c => c.parentId === null);
   const uncategorized = items.filter(
-    i => i.packingListId === null && i.categoryId === null,
+    i => i.categoryId === null,
   );
 
   return (

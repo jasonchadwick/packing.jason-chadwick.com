@@ -235,6 +235,15 @@ input {
   text-decoration: line-through;
   color: var(--color-checked-text);
 }
+.item-row.in-packing {
+  opacity: 0.55;
+}
+.item-row.in-packing:hover {
+  opacity: 1;
+}
+.item-row.in-packing .item-name {
+  color: var(--color-text-muted);
+}
 
 .item-checkbox {
   width: 18px;
@@ -259,7 +268,8 @@ input {
   opacity: 0.4;
   transition: opacity 0.15s;
 }
-.item-row:hover .item-actions {
+.item-row:hover .item-actions,
+.item-row.in-packing .item-actions {
   opacity: 1;
 }
 
@@ -279,8 +289,21 @@ input {
 .btn-move.pack {
   background: var(--color-secondary);
 }
-.btn-move.pack:hover {
+.btn-move.pack:hover:not(:disabled) {
   background: var(--color-primary);
+}
+.btn-move.pack.packed-out,
+.btn-move.pack:disabled {
+  background: transparent;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  cursor: default;
+  opacity: 0.7;
+}
+.btn-move.pack.packed-out:hover,
+.btn-move.pack:disabled:hover {
+  background: transparent;
+  color: var(--color-text-muted);
 }
 
 .btn-icon {
