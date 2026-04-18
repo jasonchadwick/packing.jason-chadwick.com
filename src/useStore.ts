@@ -39,6 +39,10 @@ function normalizeName(name: string): string {
   return name.trim().toLocaleLowerCase();
 }
 
+function getItemMergeKey(name: string, categoryId: string | null, packingListId: string | null): string {
+  return `${normalizeName(name)}::${categoryId ?? 'none'}::${packingListId ?? 'inventory'}`;
+}
+
 function getUniqueId(id: string, used: Set<string>): string {
   if (!used.has(id)) {
     used.add(id);
@@ -138,12 +142,19 @@ function mergeInventory(existing: Inventory, imported: Inventory): Inventory {
 
   const mergedItems = [...existing.items];
   const itemIds = new Set(mergedItems.map(i => i.id));
+  const existingItemKeys = new Set(
+    mergedItems.map(item => getItemMergeKey(item.name, item.categoryId, item.packingListId)),
+  );
   for (const item of imported.items) {
-    const id = getUniqueId(item.id, itemIds);
     const categoryId = item.categoryId === null ? null : (categoryIdMap.get(item.categoryId) ?? null);
     const packingListId = item.packingListId === null
       ? null
       : (packingListIdMap.get(item.packingListId) ?? null);
+    const key = getItemMergeKey(item.name, categoryId, packingListId);
+    if (existingItemKeys.has(key)) continue;
+
+    const id = getUniqueId(item.id, itemIds);
+    existingItemKeys.add(key);
     mergedItems.push({ ...item, id, categoryId, packingListId });
   }
 
