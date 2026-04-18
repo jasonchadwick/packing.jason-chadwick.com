@@ -987,6 +987,8 @@ export default function App() {
       const text = await file.text();
       const parsed = JSON.parse(text) as unknown;
 
+      // Accept both direct app-state exports and optional wrapper objects
+      // that store the state payload under a `state` property.
       const wrapped = parsed as { state?: RawState } | null;
       const raw = wrapped && typeof wrapped === 'object' && wrapped.state ? wrapped.state : parsed;
       if (!raw || typeof raw !== 'object') throw new Error('Invalid JSON structure');
@@ -998,7 +1000,8 @@ export default function App() {
 
       const migrated = migrateState(raw as RawState);
       dispatch({ type: 'IMPORT_STATE', state: migrated });
-    } catch {
+    } catch (error) {
+      console.error('JSON import failed:', error);
       window.alert('Could not import JSON. Please choose a valid export file.');
     } finally {
       e.target.value = '';
