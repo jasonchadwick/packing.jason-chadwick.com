@@ -283,23 +283,6 @@ function CategoryTree({
         onDragOver={e => dragCtx.onDragOver(e, category.id, 'category')}
         onDrop={e => dragCtx.onDrop(e, category.id, 'category')}
       >
-        <span
-          className="drag-handle"
-          draggable
-          onMouseDown={() => { isDragHandleActive.current = true; }}
-          onDragStart={e => {
-            if (!isDragHandleActive.current) { e.preventDefault(); return; }
-            isDragHandleActive.current = false;
-            e.stopPropagation();
-            if (blockRef.current) e.dataTransfer.setDragImage(blockRef.current, 0, 0);
-            e.dataTransfer.effectAllowed = 'move';
-            dragCtx.startDrag(category.id, 'category');
-          }}
-          onDragEnd={() => { isDragHandleActive.current = false; dragCtx.endDrag(); }}
-          title="Drag to reorder"
-        >
-          ⠿
-        </span>
         <button
           className="btn-icon collapse-btn"
           onClick={() => dispatch({ type: 'TOGGLE_COLLAPSE', id: category.id })}
@@ -365,6 +348,23 @@ function CategoryTree({
         >
           ✕
         </button>
+        <span
+          className="drag-handle"
+          draggable
+          onPointerDown={() => { isDragHandleActive.current = true; }}
+          onDragStart={e => {
+            if (!isDragHandleActive.current) { e.preventDefault(); return; }
+            isDragHandleActive.current = false;
+            e.stopPropagation();
+            if (blockRef.current) e.dataTransfer.setDragImage(blockRef.current, 0, 0);
+            e.dataTransfer.effectAllowed = 'move';
+            dragCtx.startDrag(category.id, 'category');
+          }}
+          onDragEnd={() => { isDragHandleActive.current = false; dragCtx.endDrag(); }}
+          title="Drag to reorder"
+        >
+          ⠿
+        </span>
       </div>
 
       {!category.collapsed && (
@@ -444,23 +444,6 @@ function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowP
       onDragOver={e => dragCtx.onDragOver(e, item.id, 'item')}
       onDrop={e => dragCtx.onDrop(e, item.id, 'item')}
     >
-      <span
-        className="drag-handle"
-        draggable
-        onMouseDown={() => { isDragHandleActive.current = true; }}
-        onDragStart={e => {
-          if (!isDragHandleActive.current) { e.preventDefault(); return; }
-          isDragHandleActive.current = false;
-          e.stopPropagation();
-          if (rowRef.current) e.dataTransfer.setDragImage(rowRef.current, 0, 0);
-          e.dataTransfer.effectAllowed = 'move';
-          dragCtx.startDrag(item.id, 'item');
-        }}
-        onDragEnd={() => { isDragHandleActive.current = false; dragCtx.endDrag(); }}
-        title="Drag to reorder"
-      >
-        ⠿
-      </span>
       {viewLocation === 'packing' && (
         <input
           type="checkbox"
@@ -468,6 +451,21 @@ function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowP
           checked={item.checked}
           onChange={() => dispatch({ type: 'TOGGLE_CHECK', id: item.id })}
         />
+      )}
+      {viewLocation === 'inventory' && (
+        <button
+          className={`btn-move pack${item.packingListId !== null ? ' packed-out' : ''}`}
+          onClick={() => {
+            if (item.packingListId !== null) {
+              dispatch({ type: 'MOVE_ITEM', id: item.id, packingListId: null });
+            } else {
+              dispatch({ type: 'MOVE_ITEM', id: item.id, packingListId: activePackingListId });
+            }
+          }}
+          title={item.packingListId !== null ? 'Remove from packing list' : 'Add to packing list'}
+        >
+          {item.packingListId !== null ? 'Pack ✓' : 'Pack →'}
+        </button>
       )}
       <InlineEdit
         value={item.name}
@@ -499,21 +497,6 @@ function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowP
           </button>
         ) : (
           <button
-            className={`btn-move pack${item.packingListId !== null ? ' packed-out' : ''}`}
-            onClick={() => {
-              if (item.packingListId !== null) {
-                dispatch({ type: 'MOVE_ITEM', id: item.id, packingListId: null });
-              } else {
-                dispatch({ type: 'MOVE_ITEM', id: item.id, packingListId: activePackingListId });
-              }
-            }}
-            title={item.packingListId !== null ? 'Remove from packing list' : 'Add to packing list'}
-          >
-            {item.packingListId !== null ? '✓ Packed' : 'Pack →'}
-          </button>
-        )}
-        {viewLocation === 'inventory' && (
-          <button
             className="btn-icon danger"
             onClick={() => dispatch({ type: 'DELETE_ITEM', id: item.id })}
             aria-label="Delete item"
@@ -522,6 +505,23 @@ function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowP
           </button>
         )}
       </div>
+      <span
+        className="drag-handle"
+        draggable
+        onPointerDown={() => { isDragHandleActive.current = true; }}
+        onDragStart={e => {
+          if (!isDragHandleActive.current) { e.preventDefault(); return; }
+          isDragHandleActive.current = false;
+          e.stopPropagation();
+          if (rowRef.current) e.dataTransfer.setDragImage(rowRef.current, 0, 0);
+          e.dataTransfer.effectAllowed = 'move';
+          dragCtx.startDrag(item.id, 'item');
+        }}
+        onDragEnd={() => { isDragHandleActive.current = false; dragCtx.endDrag(); }}
+        title="Drag to reorder"
+      >
+        ⠿
+      </span>
     </div>
   );
 }
@@ -537,6 +537,8 @@ interface ViewProps {
 
 interface PackingViewProps extends ViewProps {
   packingLists: PackingList[];
+  onNewTrip: () => void;
+  onClearChecks: () => void;
 }
 
 // ── PackingListBar ─────────────────────────────────────────────────────────────
@@ -600,7 +602,15 @@ function PackingListBar({
 
 // ── PackingView ───────────────────────────────────────────────────────────────
 
-function PackingView({ categories, items, activePackingListId, packingLists, dispatch }: PackingViewProps) {
+function PackingView({
+  categories,
+  items,
+  activePackingListId,
+  packingLists,
+  dispatch,
+  onNewTrip,
+  onClearChecks,
+}: PackingViewProps) {
   const rootCategories = categories.filter(c => c.parentId === null);
   const uncategorized = items.filter(
     i => i.packingListId === activePackingListId && i.categoryId === null,
@@ -614,6 +624,14 @@ function PackingView({ categories, items, activePackingListId, packingLists, dis
           activePackingListId={activePackingListId}
           dispatch={dispatch}
         />
+        <div className="packing-actions">
+          <button className="btn-secondary" onClick={onClearChecks}>
+            Clear Checks
+          </button>
+          <button className="btn-danger" onClick={onNewTrip}>
+            New Trip
+          </button>
+        </div>
 
         {rootCategories.map(cat => (
           <CategoryTree
@@ -792,8 +810,6 @@ function InventoryBar({
 // ── Header ────────────────────────────────────────────────────────────────────
 
 interface HeaderProps {
-  onNewTrip: () => void;
-  onClearChecks: () => void;
   syncStatus: SyncStatus;
   onSyncClick: () => void;
 }
@@ -806,7 +822,7 @@ const SYNC_LABELS: Record<SyncStatus, string> = {
   error: 'Sync error — click to retry',
 };
 
-function Header({ onNewTrip, onClearChecks, syncStatus, onSyncClick }: HeaderProps) {
+function Header({ syncStatus, onSyncClick }: HeaderProps) {
   return (
     <header className="app-header">
       <h1 className="app-title">🎒 Packing</h1>
@@ -818,12 +834,6 @@ function Header({ onNewTrip, onClearChecks, syncStatus, onSyncClick }: HeaderPro
           aria-label={SYNC_LABELS[syncStatus]}
         >
           <span className="sync-icon">{syncStatus === 'syncing' ? '↻' : '☁'}</span>
-        </button>
-        <button className="btn-secondary" onClick={onClearChecks}>
-          Clear Checks
-        </button>
-        <button className="btn-danger" onClick={onNewTrip}>
-          New Trip
         </button>
       </div>
     </header>
@@ -955,8 +965,6 @@ export default function App() {
   return (
     <div className="app">
       <Header
-        onNewTrip={handleNewTrip}
-        onClearChecks={handleClearChecks}
         syncStatus={syncStatus}
         onSyncClick={handleSyncClick}
       />
@@ -977,6 +985,8 @@ export default function App() {
             activePackingListId={activePackingListId}
             packingLists={packingLists}
             dispatch={dispatch}
+            onNewTrip={handleNewTrip}
+            onClearChecks={handleClearChecks}
           />
         ) : (
           <InventoryView
