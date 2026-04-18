@@ -557,7 +557,7 @@ function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowP
   return (
     <div className={`item-row-shell${swipeOffset < 0 ? ' swipe-active' : ''}`}>
       {viewLocation === 'inventory' && (
-        <div className="swipe-delete-indicator" aria-hidden="true">Delete</div>
+        <div className="swipe-delete-indicator">Delete</div>
       )}
       <div
         ref={rowRef}
