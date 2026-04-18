@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, createContext, useContext, useMemo } from 'react';
 import { useStore } from './useStore';
-import type { Category, Item, Location, PackingList } from './types';
+import type { AppState, Category, Item, Location, PackingList } from './types';
 import type { Action } from './types';
 import type { SyncStatus } from './syncClient';
 import { migrateState } from './migrate';
@@ -891,6 +891,7 @@ function Tabs({ active, onChange }: TabsProps) {
 export default function App() {
   const { state, dispatch } = useStore();
   const importInputRef = useRef<HTMLInputElement>(null);
+  const [importCandidateState, setImportCandidateState] = useState<AppState | null>(null);
 
   // ── Sync state ──────────────────────────────────────────────────────────────
 
@@ -1001,7 +1002,7 @@ export default function App() {
       }
 
       const migrated = migrateState(raw as RawState);
-      dispatch({ type: 'IMPORT_STATE', state: migrated });
+      setImportCandidateState(migrated);
     } catch (error) {
       console.error('JSON import failed:', error);
       const reason = error instanceof Error ? error.message : 'unknown error';
@@ -1009,7 +1010,19 @@ export default function App() {
     } finally {
       e.target.value = '';
     }
-  }, [dispatch]);
+  }, []);
+
+  const handleImportReplace = useCallback(() => {
+    if (!importCandidateState) return;
+    dispatch({ type: 'IMPORT_STATE', state: importCandidateState });
+    setImportCandidateState(null);
+  }, [dispatch, importCandidateState]);
+
+  const handleImportMerge = useCallback(() => {
+    if (!importCandidateState) return;
+    dispatch({ type: 'MERGE_STATE', state: importCandidateState });
+    setImportCandidateState(null);
+  }, [dispatch, importCandidateState]);
 
   // ── List handlers ───────────────────────────────────────────────────────────
 
@@ -1082,6 +1095,31 @@ export default function App() {
           onSkip={modalMode === 'setup' ? handleSkip : undefined}
           onClose={modalMode === 'change' ? () => setModalMode(null) : undefined}
         />
+      )}
+      {importCandidateState && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Choose import mode">
+          <div className="modal">
+            <h2 className="modal-title">Import JSON</h2>
+            <p className="modal-desc">
+              Choose how to import this file.
+              <br />
+              Full replacement will replace all current data.
+              <br />
+              Merge keeps your current data and merges categories with the same name.
+            </p>
+            <div className="modal-actions">
+              <button type="button" className="btn-danger" onClick={handleImportReplace}>
+                Full replacement
+              </button>
+              <button type="button" className="btn-primary" onClick={handleImportMerge}>
+                Merge
+              </button>
+              <button type="button" className="btn-ghost" onClick={() => setImportCandidateState(null)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
