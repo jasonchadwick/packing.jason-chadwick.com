@@ -66,4 +66,6 @@ export type Action =
   | { type: 'DELETE_PACKING_LIST'; id: string }
   | { type: 'RENAME_PACKING_LIST'; id: string; name: string }
   | { type: 'SELECT_PACKING_LIST'; id: string }
+  | { type: 'IMPORT_STATE'; state: AppState }
+  | { type: 'MERGE_STATE'; state: AppState }
   | { type: 'REPLACE_STATE'; state: AppState };

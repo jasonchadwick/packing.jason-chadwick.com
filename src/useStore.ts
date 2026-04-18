@@ -35,6 +35,175 @@ function getActiveInventory(state: AppState): Inventory | undefined {
   return state.inventories.find(inv => inv.id === state.activeInventoryId);
 }
 
+function normalizeName(name: string): string {
+  return name.trim().toLocaleLowerCase();
+}
+
+function getItemMergeKey(name: string, categoryId: string | null, packingListId: string | null): string {
+  return `${normalizeName(name)}::${categoryId ?? 'none'}::${packingListId ?? 'inventory'}`;
+}
+
+function getUniqueId(id: string, used: Set<string>): string {
+  if (!used.has(id)) {
+    used.add(id);
+    return id;
+  }
+  let candidate = generateId();
+  while (used.has(candidate)) candidate = generateId();
+  used.add(candidate);
+  return candidate;
+}
+
+function mergeInventory(existing: Inventory, imported: Inventory): Inventory {
+  const mergedPackingLists = [...existing.packingLists];
+  const packingListIds = new Set(mergedPackingLists.map(l => l.id));
+  const packingListNameToId = new Map<string, string>(
+    mergedPackingLists.map(l => [normalizeName(l.name), l.id]),
+  );
+  const packingListIdMap = new Map<string, string>();
+
+  for (const list of imported.packingLists) {
+    const key = normalizeName(list.name);
+    const existingId = packingListNameToId.get(key);
+    if (existingId) {
+      packingListIdMap.set(list.id, existingId);
+      continue;
+    }
+    const id = getUniqueId(list.id, packingListIds);
+    mergedPackingLists.push({ ...list, id });
+    packingListNameToId.set(key, id);
+    packingListIdMap.set(list.id, id);
+  }
+
+  const mergedCategories = [...existing.categories];
+  const categoryIds = new Set(mergedCategories.map(c => c.id));
+  const categoryIdMap = new Map<string, string>();
+  const categoryIndexById = new Map<string, number>(
+    mergedCategories.map((c, idx) => [c.id, idx]),
+  );
+  const categoryKeyToId = new Map<string, string>();
+  for (const cat of mergedCategories) {
+    const key = `${cat.parentId ?? 'root'}::${normalizeName(cat.name)}`;
+    if (!categoryKeyToId.has(key)) categoryKeyToId.set(key, cat.id);
+  }
+
+  const pending = new Set(imported.categories.map(c => c.id));
+  while (pending.size > 0) {
+    let progressed = false;
+    for (const cat of imported.categories) {
+      if (!pending.has(cat.id)) continue;
+      const mappedParentId = cat.parentId === null ? null : categoryIdMap.get(cat.parentId);
+      if (cat.parentId !== null && mappedParentId === undefined) continue;
+
+      const key = `${mappedParentId ?? 'root'}::${normalizeName(cat.name)}`;
+      const existingCatId = categoryKeyToId.get(key);
+      if (existingCatId) {
+        categoryIdMap.set(cat.id, existingCatId);
+        const idx = categoryIndexById.get(existingCatId);
+        if (idx !== undefined) {
+          const current = mergedCategories[idx];
+          mergedCategories[idx] = {
+            ...current,
+            isContainer: current.isContainer || cat.isContainer,
+            packed: current.packed || cat.packed,
+          };
+        }
+      } else {
+        const id = getUniqueId(cat.id, categoryIds);
+        const newCat: Category = { ...cat, id, parentId: mappedParentId ?? null };
+        categoryIdMap.set(cat.id, id);
+        mergedCategories.push(newCat);
+        categoryIndexById.set(id, mergedCategories.length - 1);
+        categoryKeyToId.set(key, id);
+      }
+      pending.delete(cat.id);
+      progressed = true;
+    }
+
+    if (!progressed) {
+      for (const cat of imported.categories) {
+        if (!pending.has(cat.id)) continue;
+        const key = `root::${normalizeName(cat.name)}`;
+        const existingCatId = categoryKeyToId.get(key);
+        if (existingCatId) {
+          categoryIdMap.set(cat.id, existingCatId);
+        } else {
+          const id = getUniqueId(cat.id, categoryIds);
+          const newCat: Category = { ...cat, id, parentId: null };
+          categoryIdMap.set(cat.id, id);
+          mergedCategories.push(newCat);
+          categoryIndexById.set(id, mergedCategories.length - 1);
+          categoryKeyToId.set(key, id);
+        }
+        pending.delete(cat.id);
+      }
+    }
+  }
+
+  const mergedItems = [...existing.items];
+  const itemIds = new Set(mergedItems.map(i => i.id));
+  const existingItemKeys = new Set(
+    mergedItems.map(item => getItemMergeKey(item.name, item.categoryId, item.packingListId)),
+  );
+  for (const item of imported.items) {
+    const categoryId = item.categoryId === null ? null : (categoryIdMap.get(item.categoryId) ?? null);
+    const packingListId = item.packingListId === null
+      ? null
+      : (packingListIdMap.get(item.packingListId) ?? null);
+    const key = getItemMergeKey(item.name, categoryId, packingListId);
+    if (existingItemKeys.has(key)) continue;
+
+    const id = getUniqueId(item.id, itemIds);
+    existingItemKeys.add(key);
+    mergedItems.push({ ...item, id, categoryId, packingListId });
+  }
+
+  const activePackingListId = mergedPackingLists.some(l => l.id === existing.activePackingListId)
+    ? existing.activePackingListId
+    : mergedPackingLists[0]?.id ?? null;
+
+  return {
+    ...existing,
+    packingLists: mergedPackingLists,
+    categories: mergedCategories,
+    items: mergedItems,
+    activePackingListId,
+  };
+}
+
+function mergeState(current: AppState, imported: AppState): AppState {
+  if (!Array.isArray(imported.inventories) || imported.inventories.length === 0) return current;
+
+  const mergedInventories = [...current.inventories];
+  const inventoryIds = new Set(mergedInventories.map(inv => inv.id));
+  const inventoryNameToIndex = new Map<string, number>();
+  for (const [idx, inv] of mergedInventories.entries()) {
+    const key = normalizeName(inv.name);
+    if (!inventoryNameToIndex.has(key)) inventoryNameToIndex.set(key, idx);
+  }
+
+  for (const importedInv of imported.inventories) {
+    const key = normalizeName(importedInv.name);
+    const existingIndex = inventoryNameToIndex.get(key);
+    if (existingIndex !== undefined) {
+      mergedInventories[existingIndex] = mergeInventory(mergedInventories[existingIndex], importedInv);
+      continue;
+    }
+
+    const id = getUniqueId(importedInv.id, inventoryIds);
+    const activePackingListId = importedInv.packingLists.some(l => l.id === importedInv.activePackingListId)
+      ? importedInv.activePackingListId
+      : importedInv.packingLists[0]?.id ?? null;
+    mergedInventories.push({ ...importedInv, id, activePackingListId });
+    inventoryNameToIndex.set(key, mergedInventories.length - 1);
+  }
+
+  const activeInventoryId = mergedInventories.some(inv => inv.id === current.activeInventoryId)
+    ? current.activeInventoryId
+    : mergedInventories[0].id;
+  return { ...current, inventories: mergedInventories, activeInventoryId };
+}
+
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case 'ADD_ITEM': {
@@ -293,6 +462,17 @@ function reducer(state: AppState, action: Action): AppState {
         ...inv,
         activePackingListId: action.id,
       }));
+    case 'IMPORT_STATE': {
+      const imported = action.state;
+      if (!Array.isArray(imported.inventories) || imported.inventories.length === 0) return state;
+      const activeInventoryId = imported.inventories.some(inv => inv.id === imported.activeInventoryId)
+        ? imported.activeInventoryId
+      : imported.inventories[0].id;
+      const activeTab = imported.activeTab === 'inventory' ? 'inventory' : 'packing';
+      return { ...imported, activeInventoryId, activeTab };
+    }
+    case 'MERGE_STATE':
+      return mergeState(state, action.state);
     case 'REPLACE_STATE': {
       const newState = action.state;
       const preservedInvId = newState.inventories.some(inv => inv.id === state.activeInventoryId)
