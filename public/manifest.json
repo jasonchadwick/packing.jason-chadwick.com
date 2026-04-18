@@ -1,6 +1,6 @@
 {
-  "name": "Packing List",
-  "short_name": "Packing",
+  "name": "Crate",
+  "short_name": "Crate",
   "description": "Personal packing list manager",
   "start_url": "/",
   "display": "standalone",
