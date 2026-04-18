@@ -469,6 +469,21 @@ function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowP
           onChange={() => dispatch({ type: 'TOGGLE_CHECK', id: item.id })}
         />
       )}
+      {viewLocation === 'inventory' && (
+        <button
+          className={`btn-move pack${item.packingListId !== null ? ' packed-out' : ''}`}
+          onClick={() => {
+            if (item.packingListId !== null) {
+              dispatch({ type: 'MOVE_ITEM', id: item.id, packingListId: null });
+            } else {
+              dispatch({ type: 'MOVE_ITEM', id: item.id, packingListId: activePackingListId });
+            }
+          }}
+          title={item.packingListId !== null ? 'Remove from packing list' : 'Add to packing list'}
+        >
+          {item.packingListId !== null ? 'Pack ✓' : 'Pack →'}
+        </button>
+      )}
       <InlineEdit
         value={item.name}
         onSave={name => dispatch({ type: 'RENAME_ITEM', id: item.id, name })}
@@ -498,21 +513,6 @@ function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowP
             ↩
           </button>
         ) : (
-          <button
-            className={`btn-move pack${item.packingListId !== null ? ' packed-out' : ''}`}
-            onClick={() => {
-              if (item.packingListId !== null) {
-                dispatch({ type: 'MOVE_ITEM', id: item.id, packingListId: null });
-              } else {
-                dispatch({ type: 'MOVE_ITEM', id: item.id, packingListId: activePackingListId });
-              }
-            }}
-            title={item.packingListId !== null ? 'Remove from packing list' : 'Add to packing list'}
-          >
-            {item.packingListId !== null ? '✓ Packed' : 'Pack →'}
-          </button>
-        )}
-        {viewLocation === 'inventory' && (
           <button
             className="btn-icon danger"
             onClick={() => dispatch({ type: 'DELETE_ITEM', id: item.id })}
