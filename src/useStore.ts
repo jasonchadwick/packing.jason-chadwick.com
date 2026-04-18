@@ -293,8 +293,15 @@ function reducer(state: AppState, action: Action): AppState {
         ...inv,
         activePackingListId: action.id,
       }));
-    case 'IMPORT_STATE':
-      return action.state;
+    case 'IMPORT_STATE': {
+      const imported = action.state;
+      if (!Array.isArray(imported.inventories) || imported.inventories.length === 0) return state;
+      const activeInventoryId = imported.inventories.some(inv => inv.id === imported.activeInventoryId)
+        ? imported.activeInventoryId
+        : imported.inventories[0].id;
+      const activeTab = imported.activeTab === 'inventory' ? 'inventory' : 'packing';
+      return { ...imported, activeInventoryId, activeTab };
+    }
     case 'REPLACE_STATE': {
       const newState = action.state;
       const preservedInvId = newState.inventories.some(inv => inv.id === state.activeInventoryId)

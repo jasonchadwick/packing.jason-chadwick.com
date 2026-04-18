@@ -1004,7 +1004,8 @@ export default function App() {
       dispatch({ type: 'IMPORT_STATE', state: migrated });
     } catch (error) {
       console.error('JSON import failed:', error);
-      window.alert('Could not import JSON. Please choose a valid export file.');
+      const reason = error instanceof Error ? error.message : 'unknown error';
+      window.alert(`Could not import JSON: ${reason}`);
     } finally {
       e.target.value = '';
     }
