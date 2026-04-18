@@ -536,8 +536,8 @@ function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowP
   const swipeOffsetRef = useRef(0);
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [swipeDragging, setSwipeDragging] = useState(false);
-  const SWIPE_DELETE_THRESHOLD = 80;
-  const SWIPE_DELETE_MAX = 132;
+  const SWIPE_DELETE_THRESHOLD_PX = 80;
+  const SWIPE_MAX_OFFSET_PX = 132;
 
   useEffect(() => {
     swipeOffsetRef.current = swipeOffset;
@@ -589,7 +589,12 @@ function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowP
 
           if (!swipeEngaged.current) {
             if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
-            if (Math.abs(dy) > Math.abs(dx) || dx > 0) {
+            const isMostlyVertical = Math.abs(dy) > Math.abs(dx);
+            if (isMostlyVertical) {
+              swipeTracking.current = false;
+              return;
+            }
+            if (dx > 0) {
               swipeTracking.current = false;
               return;
             }
@@ -598,21 +603,21 @@ function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowP
           }
 
           e.preventDefault();
-          setSwipeOffset(Math.max(-SWIPE_DELETE_MAX, Math.min(0, dx)));
+          setSwipeOffset(Math.max(-SWIPE_MAX_OFFSET_PX, Math.min(0, dx)));
         }}
         onPointerUp={e => {
           if (viewLocation !== 'inventory' || e.pointerType !== 'touch') return;
-          if (swipePointerId.current !== e.pointerId) return;
+          if (swipePointerId.current !== e.pointerId) { resetSwipe(); return; }
           if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
             (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
           }
-          const shouldDelete = swipeEngaged.current && swipeOffsetRef.current <= -SWIPE_DELETE_THRESHOLD;
+          const shouldDelete = swipeEngaged.current && swipeOffsetRef.current <= -SWIPE_DELETE_THRESHOLD_PX;
           if (shouldDelete) dispatch({ type: 'DELETE_ITEM', id: item.id });
           resetSwipe();
         }}
         onPointerCancel={e => {
           if (viewLocation !== 'inventory' || e.pointerType !== 'touch') return;
-          if (swipePointerId.current !== e.pointerId) return;
+          if (swipePointerId.current !== e.pointerId) { resetSwipe(); return; }
           if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
             (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
           }
