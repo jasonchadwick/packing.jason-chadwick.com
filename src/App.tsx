@@ -286,7 +286,7 @@ function CategoryTree({
         <span
           className="drag-handle"
           draggable
-          onMouseDown={() => { isDragHandleActive.current = true; }}
+          onPointerDown={() => { isDragHandleActive.current = true; }}
           onDragStart={e => {
             if (!isDragHandleActive.current) { e.preventDefault(); return; }
             isDragHandleActive.current = false;
@@ -447,7 +447,7 @@ function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowP
       <span
         className="drag-handle"
         draggable
-        onMouseDown={() => { isDragHandleActive.current = true; }}
+        onPointerDown={() => { isDragHandleActive.current = true; }}
         onDragStart={e => {
           if (!isDragHandleActive.current) { e.preventDefault(); return; }
           isDragHandleActive.current = false;
@@ -537,6 +537,8 @@ interface ViewProps {
 
 interface PackingViewProps extends ViewProps {
   packingLists: PackingList[];
+  onNewTrip: () => void;
+  onClearChecks: () => void;
 }
 
 // ── PackingListBar ─────────────────────────────────────────────────────────────
@@ -600,7 +602,15 @@ function PackingListBar({
 
 // ── PackingView ───────────────────────────────────────────────────────────────
 
-function PackingView({ categories, items, activePackingListId, packingLists, dispatch }: PackingViewProps) {
+function PackingView({
+  categories,
+  items,
+  activePackingListId,
+  packingLists,
+  dispatch,
+  onNewTrip,
+  onClearChecks,
+}: PackingViewProps) {
   const rootCategories = categories.filter(c => c.parentId === null);
   const uncategorized = items.filter(
     i => i.packingListId === activePackingListId && i.categoryId === null,
@@ -614,6 +624,14 @@ function PackingView({ categories, items, activePackingListId, packingLists, dis
           activePackingListId={activePackingListId}
           dispatch={dispatch}
         />
+        <div className="packing-actions">
+          <button className="btn-secondary" onClick={onClearChecks}>
+            Clear Checks
+          </button>
+          <button className="btn-danger" onClick={onNewTrip}>
+            New Trip
+          </button>
+        </div>
 
         {rootCategories.map(cat => (
           <CategoryTree
@@ -792,8 +810,6 @@ function InventoryBar({
 // ── Header ────────────────────────────────────────────────────────────────────
 
 interface HeaderProps {
-  onNewTrip: () => void;
-  onClearChecks: () => void;
   syncStatus: SyncStatus;
   onSyncClick: () => void;
 }
@@ -806,7 +822,7 @@ const SYNC_LABELS: Record<SyncStatus, string> = {
   error: 'Sync error — click to retry',
 };
 
-function Header({ onNewTrip, onClearChecks, syncStatus, onSyncClick }: HeaderProps) {
+function Header({ syncStatus, onSyncClick }: HeaderProps) {
   return (
     <header className="app-header">
       <h1 className="app-title">🎒 Packing</h1>
@@ -818,12 +834,6 @@ function Header({ onNewTrip, onClearChecks, syncStatus, onSyncClick }: HeaderPro
           aria-label={SYNC_LABELS[syncStatus]}
         >
           <span className="sync-icon">{syncStatus === 'syncing' ? '↻' : '☁'}</span>
-        </button>
-        <button className="btn-secondary" onClick={onClearChecks}>
-          Clear Checks
-        </button>
-        <button className="btn-danger" onClick={onNewTrip}>
-          New Trip
         </button>
       </div>
     </header>
@@ -955,8 +965,6 @@ export default function App() {
   return (
     <div className="app">
       <Header
-        onNewTrip={handleNewTrip}
-        onClearChecks={handleClearChecks}
         syncStatus={syncStatus}
         onSyncClick={handleSyncClick}
       />
@@ -977,6 +985,8 @@ export default function App() {
             activePackingListId={activePackingListId}
             packingLists={packingLists}
             dispatch={dispatch}
+            onNewTrip={handleNewTrip}
+            onClearChecks={handleClearChecks}
           />
         ) : (
           <InventoryView

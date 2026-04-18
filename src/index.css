@@ -417,6 +417,8 @@ input {
   padding: 2px 1px;
   user-select: none;
   flex-shrink: 0;
+  order: -1;
+  touch-action: none;
   opacity: 0;
   transition: opacity 0.15s;
 }
@@ -504,6 +506,21 @@ input {
   background: color-mix(in srgb, var(--color-secondary) 8%, var(--color-surface));
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
+}
+
+.packing-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin: 0 4px 6px;
+}
+
+.packing-actions .btn-secondary {
+  background: var(--color-primary);
+  border-color: transparent;
+}
+.packing-actions .btn-secondary:hover {
+  background: var(--color-primary-hover);
 }
 
 .selector-label {
