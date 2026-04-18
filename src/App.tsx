@@ -837,7 +837,7 @@ function Header({ syncStatus, onSyncClick, onExportClick, onImportClick }: Heade
           title="Export JSON"
           aria-label="Export JSON"
         >
-          ⬇
+          Export
         </button>
         <button
           className="btn-header-action"
@@ -845,7 +845,7 @@ function Header({ syncStatus, onSyncClick, onExportClick, onImportClick }: Heade
           title="Import JSON"
           aria-label="Import JSON"
         >
-          ⬆
+          Import
         </button>
         <button
           className={`btn-sync btn-sync--${syncStatus}`}
@@ -994,7 +994,9 @@ export default function App() {
       if (!raw || typeof raw !== 'object') throw new Error('Invalid JSON structure');
 
       const data = raw as Partial<RawState>;
-      if (!Array.isArray(data.inventories) && !Array.isArray(data.items) && !Array.isArray(data.categories)) {
+      const hasNestedInventories = Array.isArray(data.inventories) && data.inventories.length > 0;
+      const hasLegacyData = Array.isArray(data.items) || Array.isArray(data.categories);
+      if (!hasNestedInventories && !hasLegacyData) {
         throw new Error('JSON does not look like packing app data');
       }
 
