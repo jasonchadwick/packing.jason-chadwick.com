@@ -293,6 +293,8 @@ function reducer(state: AppState, action: Action): AppState {
         ...inv,
         activePackingListId: action.id,
       }));
+    case 'IMPORT_STATE':
+      return action.state.inventories.length > 0 ? action.state : state;
     case 'REPLACE_STATE': {
       const newState = action.state;
       const preservedInvId = newState.inventories.some(inv => inv.id === state.activeInventoryId)

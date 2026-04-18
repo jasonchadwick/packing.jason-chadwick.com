@@ -87,6 +87,20 @@ input {
   gap: 8px;
 }
 
+.btn-header-action {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  font-size: 1rem;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.75);
+  transition: color 0.15s, background 0.15s;
+}
+.btn-header-action:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+}
+
 .btn-secondary {
   padding: 6px 12px;
   border-radius: var(--radius-sm);

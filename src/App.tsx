@@ -3,6 +3,8 @@ import { useStore } from './useStore';
 import type { Category, Item, Location, PackingList } from './types';
 import type { Action } from './types';
 import type { SyncStatus } from './syncClient';
+import { migrateState } from './migrate';
+import type { RawState } from './migrate';
 import {
   loadListId,
   isOfflineOnly,
@@ -812,6 +814,8 @@ function InventoryBar({
 interface HeaderProps {
   syncStatus: SyncStatus;
   onSyncClick: () => void;
+  onExportClick: () => void;
+  onImportClick: () => void;
 }
 
 const SYNC_LABELS: Record<SyncStatus, string> = {
@@ -822,11 +826,27 @@ const SYNC_LABELS: Record<SyncStatus, string> = {
   error: 'Sync error — click to retry',
 };
 
-function Header({ syncStatus, onSyncClick }: HeaderProps) {
+function Header({ syncStatus, onSyncClick, onExportClick, onImportClick }: HeaderProps) {
   return (
     <header className="app-header">
       <h1 className="app-title">🎒 Packing</h1>
       <div className="header-actions">
+        <button
+          className="btn-header-action"
+          onClick={onExportClick}
+          title="Export JSON"
+          aria-label="Export JSON"
+        >
+          ⬇
+        </button>
+        <button
+          className="btn-header-action"
+          onClick={onImportClick}
+          title="Import JSON"
+          aria-label="Import JSON"
+        >
+          ⬆
+        </button>
         <button
           className={`btn-sync btn-sync--${syncStatus}`}
           onClick={onSyncClick}
@@ -870,6 +890,7 @@ function Tabs({ active, onChange }: TabsProps) {
 
 export default function App() {
   const { state, dispatch } = useStore();
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   // ── Sync state ──────────────────────────────────────────────────────────────
 
@@ -942,6 +963,48 @@ export default function App() {
     setModalMode(listId ? 'change' : 'setup');
   }, [listId]);
 
+  const handleExportJson = useCallback(() => {
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const date = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = `packing-export-${date}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }, [state]);
+
+  const handleImportClick = useCallback(() => {
+    importInputRef.current?.click();
+  }, []);
+
+  const handleImportJson = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text) as unknown;
+
+      const wrapped = parsed as { state?: RawState } | null;
+      const raw = wrapped && typeof wrapped === 'object' && wrapped.state ? wrapped.state : parsed;
+      if (!raw || typeof raw !== 'object') throw new Error('Invalid JSON structure');
+
+      const data = raw as Partial<RawState>;
+      if (!Array.isArray(data.inventories) && !Array.isArray(data.items) && !Array.isArray(data.categories)) {
+        throw new Error('JSON does not look like packing app data');
+      }
+
+      const migrated = migrateState(raw as RawState);
+      dispatch({ type: 'IMPORT_STATE', state: migrated });
+    } catch {
+      window.alert('Could not import JSON. Please choose a valid export file.');
+    } finally {
+      e.target.value = '';
+    }
+  }, [dispatch]);
+
   // ── List handlers ───────────────────────────────────────────────────────────
 
   const handleNewTrip = useCallback(() => {
@@ -967,6 +1030,15 @@ export default function App() {
       <Header
         syncStatus={syncStatus}
         onSyncClick={handleSyncClick}
+        onExportClick={handleExportJson}
+        onImportClick={handleImportClick}
+      />
+      <input
+        ref={importInputRef}
+        type="file"
+        accept="application/json,.json"
+        onChange={handleImportJson}
+        style={{ display: 'none' }}
       />
       <Tabs
         active={state.activeTab}
