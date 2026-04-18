@@ -283,23 +283,6 @@ function CategoryTree({
         onDragOver={e => dragCtx.onDragOver(e, category.id, 'category')}
         onDrop={e => dragCtx.onDrop(e, category.id, 'category')}
       >
-        <span
-          className="drag-handle"
-          draggable
-          onPointerDown={() => { isDragHandleActive.current = true; }}
-          onDragStart={e => {
-            if (!isDragHandleActive.current) { e.preventDefault(); return; }
-            isDragHandleActive.current = false;
-            e.stopPropagation();
-            if (blockRef.current) e.dataTransfer.setDragImage(blockRef.current, 0, 0);
-            e.dataTransfer.effectAllowed = 'move';
-            dragCtx.startDrag(category.id, 'category');
-          }}
-          onDragEnd={() => { isDragHandleActive.current = false; dragCtx.endDrag(); }}
-          title="Drag to reorder"
-        >
-          ⠿
-        </span>
         <button
           className="btn-icon collapse-btn"
           onClick={() => dispatch({ type: 'TOGGLE_COLLAPSE', id: category.id })}
@@ -365,6 +348,23 @@ function CategoryTree({
         >
           ✕
         </button>
+        <span
+          className="drag-handle"
+          draggable
+          onPointerDown={() => { isDragHandleActive.current = true; }}
+          onDragStart={e => {
+            if (!isDragHandleActive.current) { e.preventDefault(); return; }
+            isDragHandleActive.current = false;
+            e.stopPropagation();
+            if (blockRef.current) e.dataTransfer.setDragImage(blockRef.current, 0, 0);
+            e.dataTransfer.effectAllowed = 'move';
+            dragCtx.startDrag(category.id, 'category');
+          }}
+          onDragEnd={() => { isDragHandleActive.current = false; dragCtx.endDrag(); }}
+          title="Drag to reorder"
+        >
+          ⠿
+        </span>
       </div>
 
       {!category.collapsed && (
@@ -444,23 +444,6 @@ function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowP
       onDragOver={e => dragCtx.onDragOver(e, item.id, 'item')}
       onDrop={e => dragCtx.onDrop(e, item.id, 'item')}
     >
-      <span
-        className="drag-handle"
-        draggable
-        onPointerDown={() => { isDragHandleActive.current = true; }}
-        onDragStart={e => {
-          if (!isDragHandleActive.current) { e.preventDefault(); return; }
-          isDragHandleActive.current = false;
-          e.stopPropagation();
-          if (rowRef.current) e.dataTransfer.setDragImage(rowRef.current, 0, 0);
-          e.dataTransfer.effectAllowed = 'move';
-          dragCtx.startDrag(item.id, 'item');
-        }}
-        onDragEnd={() => { isDragHandleActive.current = false; dragCtx.endDrag(); }}
-        title="Drag to reorder"
-      >
-        ⠿
-      </span>
       {viewLocation === 'packing' && (
         <input
           type="checkbox"
@@ -522,6 +505,23 @@ function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowP
           </button>
         )}
       </div>
+      <span
+        className="drag-handle"
+        draggable
+        onPointerDown={() => { isDragHandleActive.current = true; }}
+        onDragStart={e => {
+          if (!isDragHandleActive.current) { e.preventDefault(); return; }
+          isDragHandleActive.current = false;
+          e.stopPropagation();
+          if (rowRef.current) e.dataTransfer.setDragImage(rowRef.current, 0, 0);
+          e.dataTransfer.effectAllowed = 'move';
+          dragCtx.startDrag(item.id, 'item');
+        }}
+        onDragEnd={() => { isDragHandleActive.current = false; dragCtx.endDrag(); }}
+        title="Drag to reorder"
+      >
+        ⠿
+      </span>
     </div>
   );
 }
