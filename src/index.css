@@ -506,10 +506,10 @@ input {
 
 /* Drop line indicators */
 .item-row.drop-before {
-  box-shadow: 0 -2px 0 0 var(--color-primary);
+  box-shadow: inset 0 2px 0 0 var(--color-primary);
 }
 .item-row.drop-after {
-  box-shadow: 0 2px 0 0 var(--color-primary);
+  box-shadow: inset 0 -2px 0 0 var(--color-primary);
 }
 .category-block.drop-before {
   box-shadow: 0 -2px 0 0 var(--color-primary);
