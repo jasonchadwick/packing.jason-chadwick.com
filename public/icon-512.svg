@@ -1,4 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="96" fill="#2d6a4f"/>
-  <text x="256" y="348" font-size="270" text-anchor="middle" font-family="sans-serif">🎒</text>
+  <rect width="512" height="512" rx="96" fill="#f0faf4"/>
+  <rect x="134" y="144" width="244" height="282" rx="64" fill="#52b788"/>
+  <rect x="182" y="94" width="148" height="80" rx="38" fill="none" stroke="#95d5b2" stroke-width="24"/>
+  <rect x="198" y="220" width="116" height="92" rx="24" fill="#2d6a4f"/>
+  <rect x="166" y="176" width="180" height="26" rx="13" fill="#95d5b2"/>
+  <rect x="138" y="190" width="20" height="170" rx="10" fill="#2d6a4f"/>
+  <rect x="354" y="190" width="20" height="170" rx="10" fill="#2d6a4f"/>
 </svg>

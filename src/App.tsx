@@ -25,6 +25,8 @@ interface DragCtx {
   endDrag: () => void;
   onDragOver: (e: React.DragEvent, id: string, type: 'category' | 'item') => void;
   onDrop: (e: React.DragEvent, id: string, type: 'category' | 'item') => void;
+  updatePointerTarget: (clientX: number, clientY: number) => void;
+  commitPointerDrop: (clientX: number, clientY: number) => void;
 }
 
 const DragContext = createContext<DragCtx | null>(null);
@@ -63,23 +65,33 @@ function DragProvider({
     setDropTarget(null);
   }, []);
 
-  const onDragOver = useCallback((e: React.DragEvent, targetId: string, type: 'category' | 'item') => {
-    const cur = draggingRef.current;
-    if (!cur || cur.id === targetId || cur.type !== type) return;
+  const canDropOnTarget = useCallback((
+    cur: { id: string; type: 'category' | 'item' },
+    targetId: string,
+    type: 'category' | 'item',
+  ): boolean => {
+    if (cur.id === targetId || cur.type !== type) return false;
 
     if (type === 'category') {
       const draggedCat = categoriesRef.current.find(c => c.id === cur.id);
       const targetCat = categoriesRef.current.find(c => c.id === targetId);
-      if (!draggedCat || !targetCat || draggedCat.parentId !== targetCat.parentId) return;
-    } else {
-      const draggedItem = itemsRef.current.find(i => i.id === cur.id);
-      const targetItem = itemsRef.current.find(i => i.id === targetId);
-      if (
-        !draggedItem || !targetItem ||
-        draggedItem.categoryId !== targetItem.categoryId ||
-        draggedItem.packingListId !== targetItem.packingListId
-      ) return;
+      if (!draggedCat || !targetCat || draggedCat.parentId !== targetCat.parentId) return false;
+      return true;
     }
+
+    const draggedItem = itemsRef.current.find(i => i.id === cur.id);
+    const targetItem = itemsRef.current.find(i => i.id === targetId);
+    if (
+      !draggedItem || !targetItem ||
+      draggedItem.categoryId !== targetItem.categoryId ||
+      draggedItem.packingListId !== targetItem.packingListId
+    ) return false;
+    return true;
+  }, []);
+
+  const onDragOver = useCallback((e: React.DragEvent, targetId: string, type: 'category' | 'item') => {
+    const cur = draggingRef.current;
+    if (!cur || !canDropOnTarget(cur, targetId, type)) return;
 
     e.preventDefault();
     e.stopPropagation();
@@ -88,7 +100,33 @@ function DragProvider({
     if (dropTargetRef.current?.id !== targetId || dropTargetRef.current?.position !== position) {
       setDropTarget({ id: targetId, position });
     }
-  }, []);
+  }, [canDropOnTarget]);
+
+  const resolvePointerDropTarget = useCallback((clientX: number, clientY: number) => {
+    const cur = draggingRef.current;
+    if (!cur) return null;
+    const element = document.elementFromPoint(clientX, clientY) as HTMLElement | null;
+    const target = element?.closest<HTMLElement>('[data-drag-id][data-drag-type]');
+    if (!target) return null;
+    const targetId = target.dataset.dragId;
+    const targetType = target.dataset.dragType;
+    if (!targetId || (targetType !== 'category' && targetType !== 'item')) return null;
+    if (!canDropOnTarget(cur, targetId, targetType)) return null;
+    const rect = target.getBoundingClientRect();
+    const position: 'before' | 'after' = clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+    return { id: targetId, type: targetType, position };
+  }, [canDropOnTarget]);
+
+  const updatePointerTarget = useCallback((clientX: number, clientY: number) => {
+    const target = resolvePointerDropTarget(clientX, clientY);
+    if (!target) {
+      if (dropTargetRef.current !== null) setDropTarget(null);
+      return;
+    }
+    if (dropTargetRef.current?.id !== target.id || dropTargetRef.current?.position !== target.position) {
+      setDropTarget({ id: target.id, position: target.position });
+    }
+  }, [resolvePointerDropTarget]);
 
   const onDrop = useCallback((e: React.DragEvent, targetId: string, type: 'category' | 'item') => {
     e.preventDefault();
@@ -108,9 +146,35 @@ function DragProvider({
     }
   }, [dispatch]);
 
+  const commitPointerDrop = useCallback((clientX: number, clientY: number) => {
+    const cur = draggingRef.current;
+    const targetFromPointer = resolvePointerDropTarget(clientX, clientY);
+    const dt = targetFromPointer
+      ? { id: targetFromPointer.id, position: targetFromPointer.position }
+      : dropTargetRef.current;
+    setDragging(null);
+    setDropTarget(null);
+    if (!cur || !dt) return;
+    if (cur.id === dt.id) return;
+    if (cur.type === 'category') {
+      dispatch({ type: 'REORDER_CATEGORY', id: cur.id, targetId: dt.id, position: dt.position });
+    } else {
+      dispatch({ type: 'REORDER_ITEM', id: cur.id, targetId: dt.id, position: dt.position });
+    }
+  }, [dispatch, resolvePointerDropTarget]);
+
   const ctx = useMemo(
-    () => ({ dragging, dropTarget, startDrag, endDrag, onDragOver, onDrop }),
-    [dragging, dropTarget, startDrag, endDrag, onDragOver, onDrop],
+    () => ({
+      dragging,
+      dropTarget,
+      startDrag,
+      endDrag,
+      onDragOver,
+      onDrop,
+      updatePointerTarget,
+      commitPointerDrop,
+    }),
+    [dragging, dropTarget, startDrag, endDrag, onDragOver, onDrop, updatePointerTarget, commitPointerDrop],
   );
 
   return <DragContext.Provider value={ctx}>{children}</DragContext.Provider>;
@@ -277,6 +341,8 @@ function CategoryTree({
   return (
     <div
       ref={blockRef}
+      data-drag-id={category.id}
+      data-drag-type="category"
       className={`category-block${isDragging ? ' is-dragging' : ''}${dropPos ? ` drop-${dropPos}` : ''}`}
       style={{ '--depth': depth } as React.CSSProperties}
     >
@@ -353,7 +419,34 @@ function CategoryTree({
         <span
           className="drag-handle"
           draggable
-          onPointerDown={() => { isDragHandleActive.current = true; }}
+          onPointerDown={e => {
+            if (e.pointerType === 'touch') {
+              e.preventDefault();
+              (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+              dragCtx.startDrag(category.id, 'category');
+              return;
+            }
+            isDragHandleActive.current = true;
+          }}
+          onPointerMove={e => {
+            if (e.pointerType !== 'touch') return;
+            e.preventDefault();
+            dragCtx.updatePointerTarget(e.clientX, e.clientY);
+          }}
+          onPointerUp={e => {
+            if (e.pointerType !== 'touch') return;
+            if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
+              (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+            }
+            dragCtx.commitPointerDrop(e.clientX, e.clientY);
+          }}
+          onPointerCancel={e => {
+            if (e.pointerType !== 'touch') return;
+            if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
+              (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+            }
+            dragCtx.endDrag();
+          }}
           onDragStart={e => {
             if (!isDragHandleActive.current) { e.preventDefault(); return; }
             isDragHandleActive.current = false;
@@ -435,95 +528,209 @@ function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowP
   const dragCtx = useContext(DragContext)!;
   const rowRef = useRef<HTMLDivElement>(null);
   const isDragHandleActive = useRef(false);
+  const swipeStartX = useRef(0);
+  const swipeStartY = useRef(0);
+  const swipePointerId = useRef<number | null>(null);
+  const swipeTracking = useRef(false);
+  const swipeEngaged = useRef(false);
+  const swipeOffsetRef = useRef(0);
+  const [swipeOffset, setSwipeOffset] = useState(0);
+  const [swipeDragging, setSwipeDragging] = useState(false);
+  const SWIPE_DELETE_THRESHOLD_PX = 80;
+  const SWIPE_MAX_OFFSET_PX = 132;
+
+  useEffect(() => {
+    swipeOffsetRef.current = swipeOffset;
+  }, [swipeOffset]);
+
+  const resetSwipe = useCallback(() => {
+    swipePointerId.current = null;
+    swipeTracking.current = false;
+    swipeEngaged.current = false;
+    setSwipeDragging(false);
+    setSwipeOffset(0);
+  }, []);
 
   const isDragging = dragCtx.dragging?.id === item.id && dragCtx.dragging.type === 'item';
   const dropPos = dragCtx.dropTarget?.id === item.id ? dragCtx.dropTarget.position : null;
 
   return (
-    <div
-      ref={rowRef}
-      className={`item-row${item.checked ? ' checked' : ''}${isDragging ? ' is-dragging' : ''}${dropPos ? ` drop-${dropPos}` : ''}${viewLocation === 'inventory' && item.packingListId !== null ? ' in-packing' : ''}`}
-      onDragOver={e => dragCtx.onDragOver(e, item.id, 'item')}
-      onDrop={e => dragCtx.onDrop(e, item.id, 'item')}
-    >
-      {viewLocation === 'packing' && (
-        <input
-          type="checkbox"
-          className="item-checkbox"
-          checked={item.checked}
-          onChange={() => dispatch({ type: 'TOGGLE_CHECK', id: item.id })}
-        />
-      )}
+    <div className={`item-row-shell${swipeOffset < 0 ? ' swipe-active' : ''}`}>
       {viewLocation === 'inventory' && (
-        <button
-          className={`btn-move pack${item.packingListId !== null ? ' packed-out' : ''}`}
-          onClick={() => {
-            if (item.packingListId !== null) {
-              dispatch({ type: 'MOVE_ITEM', id: item.id, packingListId: null });
-            } else {
-              dispatch({ type: 'MOVE_ITEM', id: item.id, packingListId: activePackingListId });
-            }
-          }}
-          title={item.packingListId !== null ? 'Remove from packing list' : 'Add to packing list'}
-        >
-          {item.packingListId !== null ? 'Pack ✓' : 'Pack →'}
-        </button>
+        <div className="swipe-delete-indicator">Delete</div>
       )}
-      <InlineEdit
-        value={item.name}
-        onSave={name => dispatch({ type: 'RENAME_ITEM', id: item.id, name })}
-        className="item-name"
-      />
-      <div className="item-count">
-        <button
-          className="count-btn"
-          onClick={() => dispatch({ type: 'SET_ITEM_COUNT', id: item.id, count: item.count - 1 })}
-          aria-label="Decrease count"
-          disabled={item.count <= 1}
-        >−</button>
-        <span className="count-value">{item.count}</span>
-        <button
-          className="count-btn"
-          onClick={() => dispatch({ type: 'SET_ITEM_COUNT', id: item.id, count: item.count + 1 })}
-          aria-label="Increase count"
-        >+</button>
-      </div>
-      <div className="item-actions">
-        {viewLocation === 'packing' ? (
+      <div
+        ref={rowRef}
+        data-drag-id={item.id}
+        data-drag-type="item"
+        className={`item-row${item.checked ? ' checked' : ''}${isDragging ? ' is-dragging' : ''}${dropPos ? ` drop-${dropPos}` : ''}${viewLocation === 'inventory' && item.packingListId !== null ? ' in-packing' : ''}`}
+        onDragOver={e => dragCtx.onDragOver(e, item.id, 'item')}
+        onDrop={e => dragCtx.onDrop(e, item.id, 'item')}
+        onPointerDown={e => {
+          if (viewLocation !== 'inventory' || e.pointerType !== 'touch') return;
+          const target = e.target as HTMLElement;
+          if (
+            target.closest('button, input, select, textarea, a, label') ||
+            target.closest('.drag-handle') ||
+            target.closest('.inline-edit-input')
+          ) return;
+          swipePointerId.current = e.pointerId;
+          swipeStartX.current = e.clientX;
+          swipeStartY.current = e.clientY;
+          swipeTracking.current = true;
+          swipeEngaged.current = false;
+          (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+        }}
+        onPointerMove={e => {
+          if (viewLocation !== 'inventory' || e.pointerType !== 'touch') return;
+          if (!swipeTracking.current || swipePointerId.current !== e.pointerId) return;
+          const dx = e.clientX - swipeStartX.current;
+          const dy = e.clientY - swipeStartY.current;
+
+          if (!swipeEngaged.current) {
+            if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+            const isMostlyVertical = Math.abs(dy) > Math.abs(dx);
+            if (isMostlyVertical) {
+              swipeTracking.current = false;
+              return;
+            }
+            if (dx > 0) {
+              swipeTracking.current = false;
+              return;
+            }
+            swipeEngaged.current = true;
+            setSwipeDragging(true);
+          }
+
+          e.preventDefault();
+          setSwipeOffset(Math.max(-SWIPE_MAX_OFFSET_PX, Math.min(0, dx)));
+        }}
+        onPointerUp={e => {
+          if (viewLocation !== 'inventory' || e.pointerType !== 'touch') return;
+          if (swipePointerId.current !== e.pointerId) { resetSwipe(); return; }
+          if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
+            (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+          }
+          const shouldDelete = swipeEngaged.current && swipeOffsetRef.current <= -SWIPE_DELETE_THRESHOLD_PX;
+          if (shouldDelete) dispatch({ type: 'DELETE_ITEM', id: item.id });
+          resetSwipe();
+        }}
+        onPointerCancel={e => {
+          if (viewLocation !== 'inventory' || e.pointerType !== 'touch') return;
+          if (swipePointerId.current !== e.pointerId) { resetSwipe(); return; }
+          if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
+            (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+          }
+          resetSwipe();
+        }}
+        style={{ transform: `translateX(${swipeOffset}px)`, transition: swipeDragging ? 'none' : 'transform 0.18s ease' }}
+      >
+        {viewLocation === 'packing' && (
+          <input
+            type="checkbox"
+            className="item-checkbox"
+            checked={item.checked}
+            onChange={() => dispatch({ type: 'TOGGLE_CHECK', id: item.id })}
+          />
+        )}
+        {viewLocation === 'inventory' && (
           <button
-            className="btn-move"
-            onClick={() => dispatch({ type: 'MOVE_ITEM', id: item.id, packingListId: null })}
-            title="Move to inventory"
+            className={`btn-move pack${item.packingListId !== null ? ' packed-out' : ''}`}
+            onClick={() => {
+              if (item.packingListId !== null) {
+                dispatch({ type: 'MOVE_ITEM', id: item.id, packingListId: null });
+              } else {
+                dispatch({ type: 'MOVE_ITEM', id: item.id, packingListId: activePackingListId });
+              }
+            }}
+            title={item.packingListId !== null ? 'Remove from packing list' : 'Add to packing list'}
           >
-            ↩
-          </button>
-        ) : (
-          <button
-            className="btn-icon danger"
-            onClick={() => dispatch({ type: 'DELETE_ITEM', id: item.id })}
-            aria-label="Delete item"
-          >
-            ✕
+            {item.packingListId !== null ? 'Pack ✓' : 'Pack →'}
           </button>
         )}
+        <InlineEdit
+          value={item.name}
+          onSave={name => dispatch({ type: 'RENAME_ITEM', id: item.id, name })}
+          className="item-name"
+        />
+        <div className="item-count">
+          <button
+            className="count-btn"
+            onClick={() => dispatch({ type: 'SET_ITEM_COUNT', id: item.id, count: item.count - 1 })}
+            aria-label="Decrease count"
+            disabled={item.count <= 1}
+          >−</button>
+          <span className="count-value">{item.count}</span>
+          <button
+            className="count-btn"
+            onClick={() => dispatch({ type: 'SET_ITEM_COUNT', id: item.id, count: item.count + 1 })}
+            aria-label="Increase count"
+          >+</button>
+        </div>
+        <div className="item-actions">
+          {viewLocation === 'packing' ? (
+            <button
+              className="btn-move"
+              onClick={() => dispatch({ type: 'MOVE_ITEM', id: item.id, packingListId: null })}
+              title="Move to inventory"
+            >
+              ↩
+            </button>
+          ) : (
+            <button
+              className="btn-icon danger"
+              onClick={() => dispatch({ type: 'DELETE_ITEM', id: item.id })}
+              aria-label="Delete item"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+        <span
+          className="drag-handle"
+          draggable
+          onPointerDown={e => {
+            if (e.pointerType === 'touch') {
+              e.preventDefault();
+              (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+              dragCtx.startDrag(item.id, 'item');
+              return;
+            }
+            isDragHandleActive.current = true;
+          }}
+          onPointerMove={e => {
+            if (e.pointerType !== 'touch') return;
+            e.preventDefault();
+            dragCtx.updatePointerTarget(e.clientX, e.clientY);
+          }}
+          onPointerUp={e => {
+            if (e.pointerType !== 'touch') return;
+            if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
+              (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+            }
+            dragCtx.commitPointerDrop(e.clientX, e.clientY);
+          }}
+          onPointerCancel={e => {
+            if (e.pointerType !== 'touch') return;
+            if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
+              (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+            }
+            dragCtx.endDrag();
+          }}
+          onDragStart={e => {
+            if (!isDragHandleActive.current) { e.preventDefault(); return; }
+            isDragHandleActive.current = false;
+            e.stopPropagation();
+            if (rowRef.current) e.dataTransfer.setDragImage(rowRef.current, 0, 0);
+            e.dataTransfer.effectAllowed = 'move';
+            dragCtx.startDrag(item.id, 'item');
+          }}
+          onDragEnd={() => { isDragHandleActive.current = false; dragCtx.endDrag(); }}
+          title="Drag to reorder"
+        >
+          ⠿
+        </span>
       </div>
-      <span
-        className="drag-handle"
-        draggable
-        onPointerDown={() => { isDragHandleActive.current = true; }}
-        onDragStart={e => {
-          if (!isDragHandleActive.current) { e.preventDefault(); return; }
-          isDragHandleActive.current = false;
-          e.stopPropagation();
-          if (rowRef.current) e.dataTransfer.setDragImage(rowRef.current, 0, 0);
-          e.dataTransfer.effectAllowed = 'move';
-          dragCtx.startDrag(item.id, 'item');
-        }}
-        onDragEnd={() => { isDragHandleActive.current = false; dragCtx.endDrag(); }}
-        title="Drag to reorder"
-      >
-        ⠿
-      </span>
     </div>
   );
 }
@@ -829,7 +1036,7 @@ const SYNC_LABELS: Record<SyncStatus, string> = {
 function Header({ syncStatus, onSyncClick, onExportClick, onImportClick }: HeaderProps) {
   return (
     <header className="app-header">
-      <h1 className="app-title">🎒 Packing</h1>
+      <h1 className="app-title">Crate</h1>
       <div className="header-actions">
         <button
           className="btn-header-action"
