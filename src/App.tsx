@@ -933,12 +933,12 @@ function InventoryView({
   return (
     <DragProvider categories={categories} items={items} dispatch={dispatch}>
       <div className="view">
-        <div className="packing-actions">
+        <div className="inventory-actions packing-actions">
           <button
             className={inventoryEditMode ? 'btn-primary' : 'btn-secondary'}
             onClick={onToggleInventoryEditMode}
           >
-            {inventoryEditMode ? 'Edit Mode: On' : 'Edit Mode: Off'}
+            {inventoryEditMode ? 'Turn Edit Mode Off' : 'Turn Edit Mode On'}
           </button>
         </div>
         {rootCategories.map(cat => (
