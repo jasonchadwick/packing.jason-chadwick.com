@@ -272,18 +272,12 @@ input {
 .item-row-shell.swipe-active .swipe-delete-indicator {
   opacity: 1;
 }
-.item-row:hover {
-  background: var(--color-bg);
-}
 .item-row.checked .item-name {
   text-decoration: line-through;
   color: var(--color-checked-text);
 }
 .item-row.in-packing {
   opacity: 0.55;
-}
-.item-row.in-packing:hover {
-  opacity: 1;
 }
 .item-row.in-packing .item-name {
   color: var(--color-text-muted);
@@ -312,7 +306,6 @@ input {
   opacity: 0.4;
   transition: opacity 0.15s;
 }
-.item-row:hover .item-actions,
 .item-row.in-packing .item-actions {
   opacity: 1;
 }
@@ -467,13 +460,15 @@ input {
 .drag-handle:active {
   cursor: grabbing;
 }
-.category-header:hover .drag-handle,
-.item-row:hover .drag-handle {
-  opacity: 0.5;
-}
-.category-header:hover .drag-handle:hover,
-.item-row:hover .drag-handle:hover {
-  opacity: 1;
+@media (hover: hover) and (pointer: fine) {
+  .category-header:hover .drag-handle,
+  .item-row:hover .drag-handle {
+    opacity: 0.5;
+  }
+  .category-header:hover .drag-handle:hover,
+  .item-row:hover .drag-handle:hover {
+    opacity: 1;
+  }
 }
 
 @media (hover: none) and (pointer: coarse) {
@@ -672,7 +667,6 @@ input {
   opacity: 0.35;
   transition: opacity 0.15s;
 }
-.item-row:hover .item-count,
 .item-count:focus-within {
   opacity: 1;
 }
@@ -703,6 +697,24 @@ input {
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--color-text-muted);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .item-row:hover {
+    background: var(--color-bg);
+  }
+
+  .item-row.in-packing:hover {
+    opacity: 1;
+  }
+
+  .item-row:hover .item-actions {
+    opacity: 1;
+  }
+
+  .item-row:hover .item-count {
+    opacity: 1;
+  }
 }
 
 /* ── Scrollbar ───────────────────────────────────────────────────────────────── */

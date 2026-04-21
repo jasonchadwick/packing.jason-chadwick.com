@@ -1131,6 +1131,7 @@ function InventoryBar({
         ))}
         <option value={EDIT_LISTS_OPTION}>Edit lists…</option>
       </select>
+      <span className="selector-label">Edit mode</span>
       <label className="apple-toggle" title="Toggle edit mode">
         <input
           type="checkbox"
