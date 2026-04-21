@@ -1132,8 +1132,8 @@ function InventoryBar({
         ))}
         <option value={EDIT_LISTS_OPTION}>Edit lists…</option>
       </select>
-      <label className="selector-label" htmlFor={EDIT_MODE_TOGGLE_ID}>Edit mode</label>
-      <label className="apple-toggle" htmlFor={EDIT_MODE_TOGGLE_ID} title="Toggle edit mode">
+      <span className="selector-label">Edit mode</span>
+      <label className="apple-toggle" title="Toggle edit mode">
         <input
           id={EDIT_MODE_TOGGLE_ID}
           type="checkbox"
