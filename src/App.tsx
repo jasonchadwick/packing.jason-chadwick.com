@@ -1133,7 +1133,7 @@ function InventoryBar({
         <option value={EDIT_LISTS_OPTION}>Edit lists…</option>
       </select>
       <label className="selector-label" htmlFor={EDIT_MODE_TOGGLE_ID}>Edit mode</label>
-      <span className="apple-toggle" title="Toggle edit mode">
+      <label className="apple-toggle" htmlFor={EDIT_MODE_TOGGLE_ID} title="Toggle edit mode">
         <input
           id={EDIT_MODE_TOGGLE_ID}
           type="checkbox"
@@ -1142,7 +1142,7 @@ function InventoryBar({
           aria-label="Toggle edit mode"
         />
         <span className="apple-toggle-slider" />
-      </span>
+      </label>
     </div>
   );
 }
