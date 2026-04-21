@@ -785,6 +785,7 @@ interface PackingViewProps extends ViewProps {
   packingLists: PackingList[];
   onNewTrip: () => void;
   onClearChecks: () => void;
+  onOpenPackingListEditor: () => void;
 }
 
 // ── PackingListBar ─────────────────────────────────────────────────────────────
@@ -792,34 +793,22 @@ interface PackingViewProps extends ViewProps {
 function PackingListBar({
   packingLists,
   activePackingListId,
+  onOpenPackingListEditor,
   dispatch,
 }: {
   packingLists: PackingList[];
   activePackingListId: string | null;
+  onOpenPackingListEditor: () => void;
   dispatch: React.Dispatch<Action>;
 }) {
-  function handleAdd() {
-    const name = window.prompt('New packing list name:');
-    if (name?.trim()) dispatch({ type: 'ADD_PACKING_LIST', name: name.trim() });
-  }
+  const EDIT_LISTS_OPTION = '__edit_packing_lists__';
 
-  function handleRename() {
-    if (!activePackingListId) return;
-    const list = packingLists.find(l => l.id === activePackingListId);
-    if (!list) return;
-    const name = window.prompt('Rename list:', list.name);
-    if (name?.trim() && name.trim() !== list.name) {
-      dispatch({ type: 'RENAME_PACKING_LIST', id: activePackingListId, name: name.trim() });
+  function handleSelectChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    if (e.target.value === EDIT_LISTS_OPTION) {
+      onOpenPackingListEditor();
+      return;
     }
-  }
-
-  function handleDelete() {
-    if (!activePackingListId || packingLists.length <= 1) return;
-    const list = packingLists.find(l => l.id === activePackingListId);
-    if (!list) return;
-    if (window.confirm(`Delete packing list "${list.name}"? Items will be moved back to inventory.`)) {
-      dispatch({ type: 'DELETE_PACKING_LIST', id: activePackingListId });
-    }
+    dispatch({ type: 'SELECT_PACKING_LIST', id: e.target.value });
   }
 
   return (
@@ -827,21 +816,14 @@ function PackingListBar({
       <span className="selector-label">List</span>
       <select
         value={activePackingListId ?? ''}
-        onChange={e => dispatch({ type: 'SELECT_PACKING_LIST', id: e.target.value })}
+        onChange={handleSelectChange}
         className="selector-select"
       >
         {packingLists.map(list => (
           <option key={list.id} value={list.id}>{list.name}</option>
         ))}
+        <option value={EDIT_LISTS_OPTION}>Edit lists…</option>
       </select>
-      <button className="btn-icon" onClick={handleRename} title="Rename list">✏</button>
-      <button className="btn-icon" onClick={handleAdd} title="Add list">+</button>
-      <button
-        className="btn-icon danger"
-        onClick={handleDelete}
-        disabled={packingLists.length <= 1}
-        title="Delete list"
-      >✕</button>
     </div>
   );
 }
@@ -856,6 +838,7 @@ function PackingView({
   dispatch,
   onNewTrip,
   onClearChecks,
+  onOpenPackingListEditor,
 }: PackingViewProps) {
   const rootCategories = categories.filter(c => c.parentId === null);
   const uncategorized = items.filter(
@@ -868,6 +851,7 @@ function PackingView({
         <PackingListBar
           packingLists={packingLists}
           activePackingListId={activePackingListId}
+          onOpenPackingListEditor={onOpenPackingListEditor}
           dispatch={dispatch}
         />
         <div className="packing-actions">
@@ -994,6 +978,72 @@ function InventoryView({
         )}
       </div>
     </DragProvider>
+  );
+}
+
+function PackingListEditorModal({
+  packingLists,
+  dispatch,
+  onClose,
+}: {
+  packingLists: PackingList[];
+  dispatch: React.Dispatch<Action>;
+  onClose: () => void;
+}) {
+  const [newPackingListName, setNewPackingListName] = useState('');
+
+  function handleAddPackingList(e: React.FormEvent) {
+    e.preventDefault();
+    const name = newPackingListName.trim();
+    if (!name) return;
+    dispatch({ type: 'ADD_PACKING_LIST', name });
+    setNewPackingListName('');
+  }
+
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Edit packing lists">
+      <div className="modal">
+        <h2 className="modal-title">Edit packing lists</h2>
+        <div className="inventory-editor-list">
+          {packingLists.map(list => (
+            <div key={list.id} className="inventory-editor-row">
+              <InlineEdit
+                value={list.name}
+                onSave={name => dispatch({ type: 'RENAME_PACKING_LIST', id: list.id, name })}
+                className="inventory-editor-name"
+              />
+              <button
+                type="button"
+                className="btn-icon danger"
+                onClick={() => {
+                  if (packingLists.length <= 1) return;
+                  if (window.confirm(`Delete packing list "${list.name}"? Items will be moved back to inventory.`)) {
+                    dispatch({ type: 'DELETE_PACKING_LIST', id: list.id });
+                  }
+                }}
+                disabled={packingLists.length <= 1}
+                aria-label={`Delete ${list.name}`}
+                title="Delete list"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+        <form className="modal-form" onSubmit={handleAddPackingList}>
+          <input
+            className="modal-input"
+            value={newPackingListName}
+            onChange={e => setNewPackingListName(e.target.value)}
+            placeholder="New list name…"
+          />
+          <div className="modal-actions">
+            <button type="submit" className="btn-primary">Add list</button>
+            <button type="button" className="btn-ghost" onClick={onClose}>Close</button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }
 
@@ -1132,8 +1182,8 @@ function InventoryBar({
         ))}
         <option value={EDIT_LISTS_OPTION}>Edit lists…</option>
       </select>
-      <label className="selector-label" htmlFor={EDIT_MODE_TOGGLE_ID}>Edit mode</label>
-      <span className="apple-toggle" title="Toggle edit mode">
+      <span className="selector-label">Edit mode</span>
+      <label className="apple-toggle" title="Toggle edit mode">
         <input
           id={EDIT_MODE_TOGGLE_ID}
           type="checkbox"
@@ -1142,7 +1192,7 @@ function InventoryBar({
           aria-label="Toggle edit mode"
         />
         <span className="apple-toggle-slider" />
-      </span>
+      </label>
     </div>
   );
 }
@@ -1232,6 +1282,7 @@ export default function App() {
   const [importCandidateState, setImportCandidateState] = useState<AppState | null>(null);
   const [inventoryEditMode, setInventoryEditMode] = useState(false);
   const [isInventoryEditorOpen, setIsInventoryEditorOpen] = useState(false);
+  const [isPackingListEditorOpen, setIsPackingListEditorOpen] = useState(false);
 
   // ── Sync state ──────────────────────────────────────────────────────────────
 
@@ -1421,6 +1472,7 @@ export default function App() {
             dispatch={dispatch}
             onNewTrip={handleNewTrip}
             onClearChecks={handleClearChecks}
+            onOpenPackingListEditor={() => setIsPackingListEditorOpen(true)}
           />
         ) : (
           <InventoryView
@@ -1437,6 +1489,13 @@ export default function App() {
           inventories={state.inventories}
           dispatch={dispatch}
           onClose={() => setIsInventoryEditorOpen(false)}
+        />
+      )}
+      {isPackingListEditorOpen && (
+        <PackingListEditorModal
+          packingLists={packingLists}
+          dispatch={dispatch}
+          onClose={() => setIsPackingListEditorOpen(false)}
         />
       )}
       {modalMode && (
