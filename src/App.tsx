@@ -933,7 +933,7 @@ function InventoryView({
   return (
     <DragProvider categories={categories} items={items} dispatch={dispatch}>
       <div className="view">
-        <div className="inventory-actions packing-actions">
+        <div className="inventory-actions">
           <button
             className={inventoryEditMode ? 'btn-primary' : 'btn-secondary'}
             onClick={onToggleInventoryEditMode}

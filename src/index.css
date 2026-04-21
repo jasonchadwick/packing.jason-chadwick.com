@@ -574,18 +574,21 @@ input {
   border-radius: var(--radius);
 }
 
-.packing-actions {
+.packing-actions,
+.inventory-actions {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
   margin: 0 4px 6px;
 }
 
-.packing-actions .btn-secondary {
+.packing-actions .btn-secondary,
+.inventory-actions .btn-secondary {
   background: var(--color-primary);
   border-color: transparent;
 }
-.packing-actions .btn-secondary:hover {
+.packing-actions .btn-secondary:hover,
+.inventory-actions .btn-secondary:hover {
   background: var(--color-primary-hover);
 }
 
