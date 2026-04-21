@@ -1109,6 +1109,7 @@ function InventoryBar({
   dispatch: React.Dispatch<Action>;
 }) {
   const EDIT_LISTS_OPTION = '__edit_lists__';
+  const EDIT_MODE_TOGGLE_ID = 'inventory-edit-mode-toggle';
 
   function handleSelectChange(e: React.ChangeEvent<HTMLSelectElement>) {
     if (e.target.value === EDIT_LISTS_OPTION) {
@@ -1131,9 +1132,10 @@ function InventoryBar({
         ))}
         <option value={EDIT_LISTS_OPTION}>Edit lists…</option>
       </select>
-      <span className="selector-label">Edit mode</span>
+      <label className="selector-label" htmlFor={EDIT_MODE_TOGGLE_ID}>Edit mode</label>
       <label className="apple-toggle" title="Toggle edit mode">
         <input
+          id={EDIT_MODE_TOGGLE_ID}
           type="checkbox"
           checked={inventoryEditMode}
           onChange={onToggleInventoryEditMode}
