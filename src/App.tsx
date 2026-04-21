@@ -278,6 +278,7 @@ interface CategoryTreeProps {
   depth: number;
   viewLocation: Location;
   activePackingListId: string | null;
+  inventoryEditMode?: boolean;
   dispatch: React.Dispatch<Action>;
 }
 
@@ -323,6 +324,7 @@ function CategoryTree({
   depth,
   viewLocation,
   activePackingListId,
+  inventoryEditMode = false,
   dispatch,
 }: CategoryTreeProps) {
   const dragCtx = useContext(DragContext)!;
@@ -346,6 +348,7 @@ function CategoryTree({
 
   const isDragging = dragCtx.dragging?.id === category.id && dragCtx.dragging.type === 'category';
   const dropPos = dragCtx.dropTarget?.id === category.id ? dragCtx.dropTarget.position : null;
+  const canEditInventory = viewLocation === 'inventory' && inventoryEditMode;
 
   return (
     <div
@@ -379,13 +382,13 @@ function CategoryTree({
         <InlineEdit
           value={category.name}
           onSave={name => dispatch({ type: 'RENAME_CATEGORY', id: category.id, name })}
-          editable={viewLocation === 'inventory'}
+          editable={canEditInventory}
           className={`category-name${viewLocation === 'packing' && category.isContainer && category.packed ? ' packed' : ''}`}
         />
         {viewLocation === 'inventory' && subtreeCount > 0 && (
           <span className="badge">{subtreeCount}</span>
         )}
-        {viewLocation === 'inventory' && subtreeCount > 0 && (
+        {canEditInventory && subtreeCount > 0 && (
           <button
             className="btn-move pack"
             onClick={() =>
@@ -407,7 +410,7 @@ function CategoryTree({
             ↩
           </button>
         )}
-        {viewLocation === 'inventory' && (
+        {canEditInventory && (
           <button
             className={`btn-icon container-toggle${category.isContainer ? ' active' : ''}`}
             onClick={() => dispatch({ type: 'TOGGLE_CONTAINER', id: category.id })}
@@ -417,7 +420,7 @@ function CategoryTree({
             📦
           </button>
         )}
-        {viewLocation === 'inventory' && (
+        {canEditInventory && (
           <button
             className="btn-icon danger"
             onClick={() => {
@@ -430,7 +433,7 @@ function CategoryTree({
             ✕
           </button>
         )}
-        {viewLocation === 'inventory' && (
+        {canEditInventory && (
           <span
             className="drag-handle"
             draggable
@@ -486,6 +489,7 @@ function CategoryTree({
               item={item}
               viewLocation={viewLocation}
               activePackingListId={activePackingListId}
+              inventoryEditMode={inventoryEditMode}
               dispatch={dispatch}
             />
           ))}
@@ -499,11 +503,12 @@ function CategoryTree({
               depth={depth + 1}
               viewLocation={viewLocation}
               activePackingListId={activePackingListId}
+              inventoryEditMode={inventoryEditMode}
               dispatch={dispatch}
             />
           ))}
 
-          {viewLocation === 'inventory' && (
+          {canEditInventory && (
             <AddForm
               placeholder="Add item here…"
               onAdd={name =>
@@ -518,7 +523,7 @@ function CategoryTree({
             />
           )}
 
-          {viewLocation === 'inventory' && (
+          {canEditInventory && (
             <AddForm
               placeholder="Add sub-category…"
               onAdd={name =>
@@ -539,10 +544,17 @@ interface ItemRowProps {
   item: Item;
   viewLocation: Location;
   activePackingListId: string | null;
+  inventoryEditMode?: boolean;
   dispatch: React.Dispatch<Action>;
 }
 
-function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowProps) {
+function ItemRow({
+  item,
+  viewLocation,
+  activePackingListId,
+  inventoryEditMode = false,
+  dispatch,
+}: ItemRowProps) {
   const dragCtx = useContext(DragContext)!;
   const rowRef = useRef<HTMLDivElement>(null);
   const isDragHandleActive = useRef(false);
@@ -571,10 +583,11 @@ function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowP
 
   const isDragging = dragCtx.dragging?.id === item.id && dragCtx.dragging.type === 'item';
   const dropPos = dragCtx.dropTarget?.id === item.id ? dragCtx.dropTarget.position : null;
+  const canEditInventory = viewLocation === 'inventory' && inventoryEditMode;
 
   return (
     <div className={`item-row-shell${swipeOffset < 0 ? ' swipe-active' : ''}`}>
-      {viewLocation === 'inventory' && (
+      {canEditInventory && (
         <div className="swipe-delete-indicator">Delete</div>
       )}
       <div
@@ -585,7 +598,7 @@ function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowP
         onDragOver={e => dragCtx.onDragOver(e, item.id, 'item')}
         onDrop={e => dragCtx.onDrop(e, item.id, 'item')}
         onPointerDown={e => {
-          if (viewLocation !== 'inventory' || e.pointerType !== 'touch') return;
+          if (!canEditInventory || e.pointerType !== 'touch') return;
           const target = e.target as HTMLElement;
           if (
             target.closest('button, input, select, textarea, a, label') ||
@@ -600,7 +613,7 @@ function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowP
           (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
         }}
         onPointerMove={e => {
-          if (viewLocation !== 'inventory' || e.pointerType !== 'touch') return;
+          if (!canEditInventory || e.pointerType !== 'touch') return;
           if (!swipeTracking.current || swipePointerId.current !== e.pointerId) return;
           const dx = e.clientX - swipeStartX.current;
           const dy = e.clientY - swipeStartY.current;
@@ -624,7 +637,7 @@ function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowP
           setSwipeOffset(Math.max(-SWIPE_MAX_OFFSET_PX, Math.min(0, dx)));
         }}
         onPointerUp={e => {
-          if (viewLocation !== 'inventory' || e.pointerType !== 'touch') return;
+          if (!canEditInventory || e.pointerType !== 'touch') return;
           if (swipePointerId.current !== e.pointerId) { resetSwipe(); return; }
           if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
             (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
@@ -634,7 +647,7 @@ function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowP
           resetSwipe();
         }}
         onPointerCancel={e => {
-          if (viewLocation !== 'inventory' || e.pointerType !== 'touch') return;
+          if (!canEditInventory || e.pointerType !== 'touch') return;
           if (swipePointerId.current !== e.pointerId) { resetSwipe(); return; }
           if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
             (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
@@ -651,7 +664,7 @@ function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowP
             onChange={() => dispatch({ type: 'TOGGLE_CHECK', id: item.id })}
           />
         )}
-        {viewLocation === 'inventory' && (
+        {canEditInventory && (
           <button
             className={`btn-move pack${item.packingListId !== null ? ' packed-out' : ''}`}
             onClick={() => {
@@ -669,7 +682,7 @@ function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowP
         <InlineEdit
           value={item.name}
           onSave={name => dispatch({ type: 'RENAME_ITEM', id: item.id, name })}
-          editable={viewLocation === 'inventory'}
+          editable={canEditInventory}
           className="item-name"
         />
         <div className="item-count">
@@ -695,7 +708,7 @@ function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowP
             >
               ↩
             </button>
-          ) : (
+          ) : canEditInventory ? (
             <button
               className="btn-icon danger"
               onClick={() => dispatch({ type: 'DELETE_ITEM', id: item.id })}
@@ -703,9 +716,9 @@ function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowP
             >
               ✕
             </button>
-          )}
+          ) : null}
         </div>
-        {viewLocation === 'inventory' && (
+        {canEditInventory && (
           <span
             className="drag-handle"
             draggable
@@ -762,6 +775,8 @@ interface ViewProps {
   categories: Category[];
   items: Item[];
   activePackingListId: string | null;
+  inventoryEditMode?: boolean;
+  onToggleInventoryEditMode?: () => void;
   dispatch: React.Dispatch<Action>;
 }
 
@@ -902,7 +917,14 @@ function PackingView({
 
 // ── InventoryView ─────────────────────────────────────────────────────────────
 
-function InventoryView({ categories, items, activePackingListId, dispatch }: ViewProps) {
+function InventoryView({
+  categories,
+  items,
+  activePackingListId,
+  inventoryEditMode = false,
+  onToggleInventoryEditMode,
+  dispatch,
+}: ViewProps) {
   const rootCategories = categories.filter(c => c.parentId === null);
   const uncategorized = items.filter(
     i => i.categoryId === null,
@@ -911,6 +933,14 @@ function InventoryView({ categories, items, activePackingListId, dispatch }: Vie
   return (
     <DragProvider categories={categories} items={items} dispatch={dispatch}>
       <div className="view">
+        <div className="packing-actions">
+          <button
+            className={inventoryEditMode ? 'btn-primary' : 'btn-secondary'}
+            onClick={onToggleInventoryEditMode}
+          >
+            {inventoryEditMode ? 'Edit Mode: On' : 'Edit Mode: Off'}
+          </button>
+        </div>
         {rootCategories.map(cat => (
           <CategoryTree
             key={cat.id}
@@ -920,6 +950,7 @@ function InventoryView({ categories, items, activePackingListId, dispatch }: Vie
             depth={0}
             viewLocation="inventory"
             activePackingListId={activePackingListId}
+            inventoryEditMode={inventoryEditMode}
             dispatch={dispatch}
           />
         ))}
@@ -936,32 +967,39 @@ function InventoryView({ categories, items, activePackingListId, dispatch }: Vie
                   item={item}
                   viewLocation="inventory"
                   activePackingListId={activePackingListId}
+                  inventoryEditMode={inventoryEditMode}
                   dispatch={dispatch}
                 />
               ))}
-              <AddForm
-                placeholder="Add item here…"
-                onAdd={name =>
-                  dispatch({ type: 'ADD_ITEM', name, categoryId: null, packingListId: null })
-                }
-                className="cat-add-item"
-              />
+              {inventoryEditMode && (
+                <AddForm
+                  placeholder="Add item here…"
+                  onAdd={name =>
+                    dispatch({ type: 'ADD_ITEM', name, categoryId: null, packingListId: null })
+                  }
+                  className="cat-add-item"
+                />
+              )}
             </div>
           </div>
         )}
 
-        <AddForm
-          placeholder="Add item to inventory…"
-          onAdd={name =>
-            dispatch({ type: 'ADD_ITEM', name, categoryId: null, packingListId: null })
-          }
-          className="root-add"
-        />
-        <AddForm
-          placeholder="Add category…"
-          onAdd={name => dispatch({ type: 'ADD_CATEGORY', name, parentId: null })}
-          className="root-add"
-        />
+        {inventoryEditMode && (
+          <AddForm
+            placeholder="Add item to inventory…"
+            onAdd={name =>
+              dispatch({ type: 'ADD_ITEM', name, categoryId: null, packingListId: null })
+            }
+            className="root-add"
+          />
+        )}
+        {inventoryEditMode && (
+          <AddForm
+            placeholder="Add category…"
+            onAdd={name => dispatch({ type: 'ADD_CATEGORY', name, parentId: null })}
+            className="root-add"
+          />
+        )}
       </div>
     </DragProvider>
   );
@@ -1108,6 +1146,7 @@ export default function App() {
   const { state, dispatch } = useStore();
   const importInputRef = useRef<HTMLInputElement>(null);
   const [importCandidateState, setImportCandidateState] = useState<AppState | null>(null);
+  const [inventoryEditMode, setInventoryEditMode] = useState(false);
 
   // ── Sync state ──────────────────────────────────────────────────────────────
 
@@ -1300,6 +1339,8 @@ export default function App() {
             categories={categories}
             items={items}
             activePackingListId={activePackingListId}
+            inventoryEditMode={inventoryEditMode}
+            onToggleInventoryEditMode={() => setInventoryEditMode(v => !v)}
             dispatch={dispatch}
           />
         )}
