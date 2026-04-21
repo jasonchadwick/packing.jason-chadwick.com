@@ -186,9 +186,10 @@ interface InlineEditProps {
   value: string;
   onSave: (v: string) => void;
   className?: string;
+  editable?: boolean;
 }
 
-function InlineEdit({ value, onSave, className }: InlineEditProps) {
+function InlineEdit({ value, onSave, className, editable = true }: InlineEditProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -217,6 +218,14 @@ function InlineEdit({ value, onSave, className }: InlineEditProps) {
           if (e.key === 'Escape') { setDraft(value); setEditing(false); }
         }}
       />
+    );
+  }
+
+  if (!editable) {
+    return (
+      <span className={`inline-edit-text ${className ?? ''}`}>
+        {value}
+      </span>
     );
   }
 
@@ -370,6 +379,7 @@ function CategoryTree({
         <InlineEdit
           value={category.name}
           onSave={name => dispatch({ type: 'RENAME_CATEGORY', id: category.id, name })}
+          editable={viewLocation === 'inventory'}
           className={`category-name${viewLocation === 'packing' && category.isContainer && category.packed ? ' packed' : ''}`}
         />
         {viewLocation === 'inventory' && subtreeCount > 0 && (
@@ -397,69 +407,75 @@ function CategoryTree({
             ↩
           </button>
         )}
-        <button
-          className={`btn-icon container-toggle${category.isContainer ? ' active' : ''}`}
-          onClick={() => dispatch({ type: 'TOGGLE_CONTAINER', id: category.id })}
-          aria-label={category.isContainer ? 'Remove container status' : 'Mark as container'}
-          title={category.isContainer ? 'Remove container status' : 'Mark as container (bag, box, etc.)'}
-        >
-          📦
-        </button>
-        <button
-          className="btn-icon danger"
-          onClick={() => {
-            if (confirm(`Delete "${category.name}" and all its contents?`)) {
-              dispatch({ type: 'DELETE_CATEGORY', id: category.id });
-            }
-          }}
-          aria-label="Delete category"
-        >
-          ✕
-        </button>
-        <span
-          className="drag-handle"
-          draggable
-          onPointerDown={e => {
-            if (e.pointerType === 'touch') {
+        {viewLocation === 'inventory' && (
+          <button
+            className={`btn-icon container-toggle${category.isContainer ? ' active' : ''}`}
+            onClick={() => dispatch({ type: 'TOGGLE_CONTAINER', id: category.id })}
+            aria-label={category.isContainer ? 'Remove container status' : 'Mark as container'}
+            title={category.isContainer ? 'Remove container status' : 'Mark as container (bag, box, etc.)'}
+          >
+            📦
+          </button>
+        )}
+        {viewLocation === 'inventory' && (
+          <button
+            className="btn-icon danger"
+            onClick={() => {
+              if (confirm(`Delete "${category.name}" and all its contents?`)) {
+                dispatch({ type: 'DELETE_CATEGORY', id: category.id });
+              }
+            }}
+            aria-label="Delete category"
+          >
+            ✕
+          </button>
+        )}
+        {viewLocation === 'inventory' && (
+          <span
+            className="drag-handle"
+            draggable
+            onPointerDown={e => {
+              if (e.pointerType === 'touch') {
+                e.preventDefault();
+                (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                dragCtx.startDrag(category.id, 'category');
+                return;
+              }
+              isDragHandleActive.current = true;
+            }}
+            onPointerMove={e => {
+              if (e.pointerType !== 'touch') return;
               e.preventDefault();
-              (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+              dragCtx.updatePointerTarget(e.clientX, e.clientY);
+            }}
+            onPointerUp={e => {
+              if (e.pointerType !== 'touch') return;
+              if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
+                (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+              }
+              dragCtx.commitPointerDrop(e.clientX, e.clientY);
+            }}
+            onPointerCancel={e => {
+              if (e.pointerType !== 'touch') return;
+              if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
+                (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+              }
+              dragCtx.endDrag();
+            }}
+            onDragStart={e => {
+              if (!isDragHandleActive.current) { e.preventDefault(); return; }
+              isDragHandleActive.current = false;
+              e.stopPropagation();
+              if (blockRef.current) e.dataTransfer.setDragImage(blockRef.current, 0, 0);
+              e.dataTransfer.effectAllowed = 'move';
               dragCtx.startDrag(category.id, 'category');
-              return;
-            }
-            isDragHandleActive.current = true;
-          }}
-          onPointerMove={e => {
-            if (e.pointerType !== 'touch') return;
-            e.preventDefault();
-            dragCtx.updatePointerTarget(e.clientX, e.clientY);
-          }}
-          onPointerUp={e => {
-            if (e.pointerType !== 'touch') return;
-            if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
-              (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-            }
-            dragCtx.commitPointerDrop(e.clientX, e.clientY);
-          }}
-          onPointerCancel={e => {
-            if (e.pointerType !== 'touch') return;
-            if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
-              (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-            }
-            dragCtx.endDrag();
-          }}
-          onDragStart={e => {
-            if (!isDragHandleActive.current) { e.preventDefault(); return; }
-            isDragHandleActive.current = false;
-            e.stopPropagation();
-            if (blockRef.current) e.dataTransfer.setDragImage(blockRef.current, 0, 0);
-            e.dataTransfer.effectAllowed = 'move';
-            dragCtx.startDrag(category.id, 'category');
-          }}
-          onDragEnd={() => { isDragHandleActive.current = false; dragCtx.endDrag(); }}
-          title="Drag to reorder"
-        >
-          ⠿
-        </span>
+            }}
+            onDragEnd={() => { isDragHandleActive.current = false; dragCtx.endDrag(); }}
+            title="Drag to reorder"
+          >
+            ⠿
+          </span>
+        )}
       </div>
 
       {!category.collapsed && (
@@ -487,18 +503,20 @@ function CategoryTree({
             />
           ))}
 
-          <AddForm
-            placeholder="Add item here…"
-            onAdd={name =>
-              dispatch({
-                type: 'ADD_ITEM',
-                name,
-                categoryId: category.id,
-                packingListId: viewLocation === 'packing' ? activePackingListId : null,
-              })
-            }
-            className="cat-add-item"
-          />
+          {viewLocation === 'inventory' && (
+            <AddForm
+              placeholder="Add item here…"
+              onAdd={name =>
+                dispatch({
+                  type: 'ADD_ITEM',
+                  name,
+                  categoryId: category.id,
+                  packingListId: null,
+                })
+              }
+              className="cat-add-item"
+            />
+          )}
 
           {viewLocation === 'inventory' && (
             <AddForm
@@ -651,6 +669,7 @@ function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowP
         <InlineEdit
           value={item.name}
           onSave={name => dispatch({ type: 'RENAME_ITEM', id: item.id, name })}
+          editable={viewLocation === 'inventory'}
           className="item-name"
         />
         <div className="item-count">
@@ -686,50 +705,52 @@ function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowP
             </button>
           )}
         </div>
-        <span
-          className="drag-handle"
-          draggable
-          onPointerDown={e => {
-            if (e.pointerType === 'touch') {
+        {viewLocation === 'inventory' && (
+          <span
+            className="drag-handle"
+            draggable
+            onPointerDown={e => {
+              if (e.pointerType === 'touch') {
+                e.preventDefault();
+                (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                dragCtx.startDrag(item.id, 'item');
+                return;
+              }
+              isDragHandleActive.current = true;
+            }}
+            onPointerMove={e => {
+              if (e.pointerType !== 'touch') return;
               e.preventDefault();
-              (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+              dragCtx.updatePointerTarget(e.clientX, e.clientY);
+            }}
+            onPointerUp={e => {
+              if (e.pointerType !== 'touch') return;
+              if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
+                (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+              }
+              dragCtx.commitPointerDrop(e.clientX, e.clientY);
+            }}
+            onPointerCancel={e => {
+              if (e.pointerType !== 'touch') return;
+              if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
+                (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+              }
+              dragCtx.endDrag();
+            }}
+            onDragStart={e => {
+              if (!isDragHandleActive.current) { e.preventDefault(); return; }
+              isDragHandleActive.current = false;
+              e.stopPropagation();
+              if (rowRef.current) e.dataTransfer.setDragImage(rowRef.current, 0, 0);
+              e.dataTransfer.effectAllowed = 'move';
               dragCtx.startDrag(item.id, 'item');
-              return;
-            }
-            isDragHandleActive.current = true;
-          }}
-          onPointerMove={e => {
-            if (e.pointerType !== 'touch') return;
-            e.preventDefault();
-            dragCtx.updatePointerTarget(e.clientX, e.clientY);
-          }}
-          onPointerUp={e => {
-            if (e.pointerType !== 'touch') return;
-            if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
-              (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-            }
-            dragCtx.commitPointerDrop(e.clientX, e.clientY);
-          }}
-          onPointerCancel={e => {
-            if (e.pointerType !== 'touch') return;
-            if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
-              (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-            }
-            dragCtx.endDrag();
-          }}
-          onDragStart={e => {
-            if (!isDragHandleActive.current) { e.preventDefault(); return; }
-            isDragHandleActive.current = false;
-            e.stopPropagation();
-            if (rowRef.current) e.dataTransfer.setDragImage(rowRef.current, 0, 0);
-            e.dataTransfer.effectAllowed = 'move';
-            dragCtx.startDrag(item.id, 'item');
-          }}
-          onDragEnd={() => { isDragHandleActive.current = false; dragCtx.endDrag(); }}
-          title="Drag to reorder"
-        >
-          ⠿
-        </span>
+            }}
+            onDragEnd={() => { isDragHandleActive.current = false; dragCtx.endDrag(); }}
+            title="Drag to reorder"
+          >
+            ⠿
+          </span>
+        )}
       </div>
     </div>
   );
@@ -874,18 +895,6 @@ function PackingView({
           </div>
         )}
 
-        <AddForm
-          placeholder="Add item to packing list…"
-          onAdd={name =>
-            dispatch({ type: 'ADD_ITEM', name, categoryId: null, packingListId: activePackingListId })
-          }
-          className="root-add"
-        />
-        <AddForm
-          placeholder="Add category…"
-          onAdd={name => dispatch({ type: 'ADD_CATEGORY', name, parentId: null })}
-          className="root-add"
-        />
       </div>
     </DragProvider>
   );
