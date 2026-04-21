@@ -61,6 +61,7 @@ export type Action =
   | { type: 'ADD_INVENTORY'; name: string }
   | { type: 'DELETE_INVENTORY'; id: string }
   | { type: 'RENAME_INVENTORY'; id: string; name: string }
+  | { type: 'REORDER_INVENTORY'; id: string; targetId: string; position: 'before' | 'after' }
   | { type: 'SELECT_INVENTORY'; id: string }
   | { type: 'ADD_PACKING_LIST'; name: string }
   | { type: 'DELETE_PACKING_LIST'; id: string }

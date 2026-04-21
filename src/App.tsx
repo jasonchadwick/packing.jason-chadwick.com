@@ -186,9 +186,10 @@ interface InlineEditProps {
   value: string;
   onSave: (v: string) => void;
   className?: string;
+  editable?: boolean;
 }
 
-function InlineEdit({ value, onSave, className }: InlineEditProps) {
+function InlineEdit({ value, onSave, className, editable = true }: InlineEditProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -217,6 +218,14 @@ function InlineEdit({ value, onSave, className }: InlineEditProps) {
           if (e.key === 'Escape') { setDraft(value); setEditing(false); }
         }}
       />
+    );
+  }
+
+  if (!editable) {
+    return (
+      <span className={`inline-edit-text ${className ?? ''}`}>
+        {value}
+      </span>
     );
   }
 
@@ -269,6 +278,7 @@ interface CategoryTreeProps {
   depth: number;
   viewLocation: Location;
   activePackingListId: string | null;
+  inventoryEditMode?: boolean;
   dispatch: React.Dispatch<Action>;
 }
 
@@ -314,6 +324,7 @@ function CategoryTree({
   depth,
   viewLocation,
   activePackingListId,
+  inventoryEditMode = false,
   dispatch,
 }: CategoryTreeProps) {
   const dragCtx = useContext(DragContext)!;
@@ -337,6 +348,7 @@ function CategoryTree({
 
   const isDragging = dragCtx.dragging?.id === category.id && dragCtx.dragging.type === 'category';
   const dropPos = dragCtx.dropTarget?.id === category.id ? dragCtx.dropTarget.position : null;
+  const canEditInventory = viewLocation === 'inventory' && inventoryEditMode;
 
   return (
     <div
@@ -370,12 +382,13 @@ function CategoryTree({
         <InlineEdit
           value={category.name}
           onSave={name => dispatch({ type: 'RENAME_CATEGORY', id: category.id, name })}
+          editable={canEditInventory}
           className={`category-name${viewLocation === 'packing' && category.isContainer && category.packed ? ' packed' : ''}`}
         />
         {viewLocation === 'inventory' && subtreeCount > 0 && (
           <span className="badge">{subtreeCount}</span>
         )}
-        {viewLocation === 'inventory' && subtreeCount > 0 && (
+        {canEditInventory && subtreeCount > 0 && (
           <button
             className="btn-move pack"
             onClick={() =>
@@ -397,69 +410,75 @@ function CategoryTree({
             ↩
           </button>
         )}
-        <button
-          className={`btn-icon container-toggle${category.isContainer ? ' active' : ''}`}
-          onClick={() => dispatch({ type: 'TOGGLE_CONTAINER', id: category.id })}
-          aria-label={category.isContainer ? 'Remove container status' : 'Mark as container'}
-          title={category.isContainer ? 'Remove container status' : 'Mark as container (bag, box, etc.)'}
-        >
-          📦
-        </button>
-        <button
-          className="btn-icon danger"
-          onClick={() => {
-            if (confirm(`Delete "${category.name}" and all its contents?`)) {
-              dispatch({ type: 'DELETE_CATEGORY', id: category.id });
-            }
-          }}
-          aria-label="Delete category"
-        >
-          ✕
-        </button>
-        <span
-          className="drag-handle"
-          draggable
-          onPointerDown={e => {
-            if (e.pointerType === 'touch') {
+        {canEditInventory && (
+          <button
+            className={`btn-icon container-toggle${category.isContainer ? ' active' : ''}`}
+            onClick={() => dispatch({ type: 'TOGGLE_CONTAINER', id: category.id })}
+            aria-label={category.isContainer ? 'Remove container status' : 'Mark as container'}
+            title={category.isContainer ? 'Remove container status' : 'Mark as container (bag, box, etc.)'}
+          >
+            📦
+          </button>
+        )}
+        {canEditInventory && (
+          <button
+            className="btn-icon danger"
+            onClick={() => {
+              if (confirm(`Delete "${category.name}" and all its contents?`)) {
+                dispatch({ type: 'DELETE_CATEGORY', id: category.id });
+              }
+            }}
+            aria-label="Delete category"
+          >
+            ✕
+          </button>
+        )}
+        {canEditInventory && (
+          <span
+            className="drag-handle"
+            draggable
+            onPointerDown={e => {
+              if (e.pointerType === 'touch') {
+                e.preventDefault();
+                (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                dragCtx.startDrag(category.id, 'category');
+                return;
+              }
+              isDragHandleActive.current = true;
+            }}
+            onPointerMove={e => {
+              if (e.pointerType !== 'touch') return;
               e.preventDefault();
-              (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+              dragCtx.updatePointerTarget(e.clientX, e.clientY);
+            }}
+            onPointerUp={e => {
+              if (e.pointerType !== 'touch') return;
+              if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
+                (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+              }
+              dragCtx.commitPointerDrop(e.clientX, e.clientY);
+            }}
+            onPointerCancel={e => {
+              if (e.pointerType !== 'touch') return;
+              if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
+                (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+              }
+              dragCtx.endDrag();
+            }}
+            onDragStart={e => {
+              if (!isDragHandleActive.current) { e.preventDefault(); return; }
+              isDragHandleActive.current = false;
+              e.stopPropagation();
+              if (blockRef.current) e.dataTransfer.setDragImage(blockRef.current, 0, 0);
+              e.dataTransfer.effectAllowed = 'move';
               dragCtx.startDrag(category.id, 'category');
-              return;
-            }
-            isDragHandleActive.current = true;
-          }}
-          onPointerMove={e => {
-            if (e.pointerType !== 'touch') return;
-            e.preventDefault();
-            dragCtx.updatePointerTarget(e.clientX, e.clientY);
-          }}
-          onPointerUp={e => {
-            if (e.pointerType !== 'touch') return;
-            if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
-              (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-            }
-            dragCtx.commitPointerDrop(e.clientX, e.clientY);
-          }}
-          onPointerCancel={e => {
-            if (e.pointerType !== 'touch') return;
-            if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
-              (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-            }
-            dragCtx.endDrag();
-          }}
-          onDragStart={e => {
-            if (!isDragHandleActive.current) { e.preventDefault(); return; }
-            isDragHandleActive.current = false;
-            e.stopPropagation();
-            if (blockRef.current) e.dataTransfer.setDragImage(blockRef.current, 0, 0);
-            e.dataTransfer.effectAllowed = 'move';
-            dragCtx.startDrag(category.id, 'category');
-          }}
-          onDragEnd={() => { isDragHandleActive.current = false; dragCtx.endDrag(); }}
-          title="Drag to reorder"
-        >
-          ⠿
-        </span>
+            }}
+            onDragEnd={() => { isDragHandleActive.current = false; dragCtx.endDrag(); }}
+            title="Drag to reorder"
+          >
+            ⠿
+          </span>
+        )}
       </div>
 
       {!category.collapsed && (
@@ -470,6 +489,7 @@ function CategoryTree({
               item={item}
               viewLocation={viewLocation}
               activePackingListId={activePackingListId}
+              inventoryEditMode={inventoryEditMode}
               dispatch={dispatch}
             />
           ))}
@@ -483,24 +503,27 @@ function CategoryTree({
               depth={depth + 1}
               viewLocation={viewLocation}
               activePackingListId={activePackingListId}
+              inventoryEditMode={inventoryEditMode}
               dispatch={dispatch}
             />
           ))}
 
-          <AddForm
-            placeholder="Add item here…"
-            onAdd={name =>
-              dispatch({
-                type: 'ADD_ITEM',
-                name,
-                categoryId: category.id,
-                packingListId: viewLocation === 'packing' ? activePackingListId : null,
-              })
-            }
-            className="cat-add-item"
-          />
+          {canEditInventory && (
+            <AddForm
+              placeholder="Add item here…"
+              onAdd={name =>
+                dispatch({
+                  type: 'ADD_ITEM',
+                  name,
+                  categoryId: category.id,
+                  packingListId: null,
+                })
+              }
+              className="cat-add-item"
+            />
+          )}
 
-          {viewLocation === 'inventory' && (
+          {canEditInventory && (
             <AddForm
               placeholder="Add sub-category…"
               onAdd={name =>
@@ -521,10 +544,17 @@ interface ItemRowProps {
   item: Item;
   viewLocation: Location;
   activePackingListId: string | null;
+  inventoryEditMode?: boolean;
   dispatch: React.Dispatch<Action>;
 }
 
-function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowProps) {
+function ItemRow({
+  item,
+  viewLocation,
+  activePackingListId,
+  inventoryEditMode = false,
+  dispatch,
+}: ItemRowProps) {
   const dragCtx = useContext(DragContext)!;
   const rowRef = useRef<HTMLDivElement>(null);
   const isDragHandleActive = useRef(false);
@@ -553,10 +583,11 @@ function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowP
 
   const isDragging = dragCtx.dragging?.id === item.id && dragCtx.dragging.type === 'item';
   const dropPos = dragCtx.dropTarget?.id === item.id ? dragCtx.dropTarget.position : null;
+  const canEditInventory = viewLocation === 'inventory' && inventoryEditMode;
 
   return (
     <div className={`item-row-shell${swipeOffset < 0 ? ' swipe-active' : ''}`}>
-      {viewLocation === 'inventory' && (
+      {canEditInventory && (
         <div className="swipe-delete-indicator">Delete</div>
       )}
       <div
@@ -567,7 +598,7 @@ function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowP
         onDragOver={e => dragCtx.onDragOver(e, item.id, 'item')}
         onDrop={e => dragCtx.onDrop(e, item.id, 'item')}
         onPointerDown={e => {
-          if (viewLocation !== 'inventory' || e.pointerType !== 'touch') return;
+          if (!canEditInventory || e.pointerType !== 'touch') return;
           const target = e.target as HTMLElement;
           if (
             target.closest('button, input, select, textarea, a, label') ||
@@ -582,7 +613,7 @@ function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowP
           (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
         }}
         onPointerMove={e => {
-          if (viewLocation !== 'inventory' || e.pointerType !== 'touch') return;
+          if (!canEditInventory || e.pointerType !== 'touch') return;
           if (!swipeTracking.current || swipePointerId.current !== e.pointerId) return;
           const dx = e.clientX - swipeStartX.current;
           const dy = e.clientY - swipeStartY.current;
@@ -606,7 +637,7 @@ function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowP
           setSwipeOffset(Math.max(-SWIPE_MAX_OFFSET_PX, Math.min(0, dx)));
         }}
         onPointerUp={e => {
-          if (viewLocation !== 'inventory' || e.pointerType !== 'touch') return;
+          if (!canEditInventory || e.pointerType !== 'touch') return;
           if (swipePointerId.current !== e.pointerId) { resetSwipe(); return; }
           if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
             (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
@@ -616,7 +647,7 @@ function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowP
           resetSwipe();
         }}
         onPointerCancel={e => {
-          if (viewLocation !== 'inventory' || e.pointerType !== 'touch') return;
+          if (!canEditInventory || e.pointerType !== 'touch') return;
           if (swipePointerId.current !== e.pointerId) { resetSwipe(); return; }
           if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
             (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
@@ -651,22 +682,25 @@ function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowP
         <InlineEdit
           value={item.name}
           onSave={name => dispatch({ type: 'RENAME_ITEM', id: item.id, name })}
+          editable={canEditInventory}
           className="item-name"
         />
-        <div className="item-count">
-          <button
-            className="count-btn"
-            onClick={() => dispatch({ type: 'SET_ITEM_COUNT', id: item.id, count: item.count - 1 })}
-            aria-label="Decrease count"
-            disabled={item.count <= 1}
-          >−</button>
-          <span className="count-value">{item.count}</span>
-          <button
-            className="count-btn"
-            onClick={() => dispatch({ type: 'SET_ITEM_COUNT', id: item.id, count: item.count + 1 })}
-            aria-label="Increase count"
-          >+</button>
-        </div>
+        {viewLocation === 'packing' && (
+          <div className="item-count">
+            <button
+              className="count-btn"
+              onClick={() => dispatch({ type: 'SET_ITEM_COUNT', id: item.id, count: item.count - 1 })}
+              aria-label="Decrease count"
+              disabled={item.count <= 1}
+            >−</button>
+            <span className="count-value">{item.count}</span>
+            <button
+              className="count-btn"
+              onClick={() => dispatch({ type: 'SET_ITEM_COUNT', id: item.id, count: item.count + 1 })}
+              aria-label="Increase count"
+            >+</button>
+          </div>
+        )}
         <div className="item-actions">
           {viewLocation === 'packing' ? (
             <button
@@ -676,7 +710,7 @@ function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowP
             >
               ↩
             </button>
-          ) : (
+          ) : canEditInventory ? (
             <button
               className="btn-icon danger"
               onClick={() => dispatch({ type: 'DELETE_ITEM', id: item.id })}
@@ -684,52 +718,54 @@ function ItemRow({ item, viewLocation, activePackingListId, dispatch }: ItemRowP
             >
               ✕
             </button>
-          )}
+          ) : null}
         </div>
-        <span
-          className="drag-handle"
-          draggable
-          onPointerDown={e => {
-            if (e.pointerType === 'touch') {
+        {canEditInventory && (
+          <span
+            className="drag-handle"
+            draggable
+            onPointerDown={e => {
+              if (e.pointerType === 'touch') {
+                e.preventDefault();
+                (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                dragCtx.startDrag(item.id, 'item');
+                return;
+              }
+              isDragHandleActive.current = true;
+            }}
+            onPointerMove={e => {
+              if (e.pointerType !== 'touch') return;
               e.preventDefault();
-              (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+              dragCtx.updatePointerTarget(e.clientX, e.clientY);
+            }}
+            onPointerUp={e => {
+              if (e.pointerType !== 'touch') return;
+              if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
+                (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+              }
+              dragCtx.commitPointerDrop(e.clientX, e.clientY);
+            }}
+            onPointerCancel={e => {
+              if (e.pointerType !== 'touch') return;
+              if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
+                (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+              }
+              dragCtx.endDrag();
+            }}
+            onDragStart={e => {
+              if (!isDragHandleActive.current) { e.preventDefault(); return; }
+              isDragHandleActive.current = false;
+              e.stopPropagation();
+              if (rowRef.current) e.dataTransfer.setDragImage(rowRef.current, 0, 0);
+              e.dataTransfer.effectAllowed = 'move';
               dragCtx.startDrag(item.id, 'item');
-              return;
-            }
-            isDragHandleActive.current = true;
-          }}
-          onPointerMove={e => {
-            if (e.pointerType !== 'touch') return;
-            e.preventDefault();
-            dragCtx.updatePointerTarget(e.clientX, e.clientY);
-          }}
-          onPointerUp={e => {
-            if (e.pointerType !== 'touch') return;
-            if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
-              (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-            }
-            dragCtx.commitPointerDrop(e.clientX, e.clientY);
-          }}
-          onPointerCancel={e => {
-            if (e.pointerType !== 'touch') return;
-            if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
-              (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-            }
-            dragCtx.endDrag();
-          }}
-          onDragStart={e => {
-            if (!isDragHandleActive.current) { e.preventDefault(); return; }
-            isDragHandleActive.current = false;
-            e.stopPropagation();
-            if (rowRef.current) e.dataTransfer.setDragImage(rowRef.current, 0, 0);
-            e.dataTransfer.effectAllowed = 'move';
-            dragCtx.startDrag(item.id, 'item');
-          }}
-          onDragEnd={() => { isDragHandleActive.current = false; dragCtx.endDrag(); }}
-          title="Drag to reorder"
-        >
-          ⠿
-        </span>
+            }}
+            onDragEnd={() => { isDragHandleActive.current = false; dragCtx.endDrag(); }}
+            title="Drag to reorder"
+          >
+            ⠿
+          </span>
+        )}
       </div>
     </div>
   );
@@ -741,6 +777,7 @@ interface ViewProps {
   categories: Category[];
   items: Item[];
   activePackingListId: string | null;
+  inventoryEditMode?: boolean;
   dispatch: React.Dispatch<Action>;
 }
 
@@ -874,18 +911,6 @@ function PackingView({
           </div>
         )}
 
-        <AddForm
-          placeholder="Add item to packing list…"
-          onAdd={name =>
-            dispatch({ type: 'ADD_ITEM', name, categoryId: null, packingListId: activePackingListId })
-          }
-          className="root-add"
-        />
-        <AddForm
-          placeholder="Add category…"
-          onAdd={name => dispatch({ type: 'ADD_CATEGORY', name, parentId: null })}
-          className="root-add"
-        />
       </div>
     </DragProvider>
   );
@@ -893,7 +918,13 @@ function PackingView({
 
 // ── InventoryView ─────────────────────────────────────────────────────────────
 
-function InventoryView({ categories, items, activePackingListId, dispatch }: ViewProps) {
+function InventoryView({
+  categories,
+  items,
+  activePackingListId,
+  inventoryEditMode = false,
+  dispatch,
+}: ViewProps) {
   const rootCategories = categories.filter(c => c.parentId === null);
   const uncategorized = items.filter(
     i => i.categoryId === null,
@@ -911,6 +942,7 @@ function InventoryView({ categories, items, activePackingListId, dispatch }: Vie
             depth={0}
             viewLocation="inventory"
             activePackingListId={activePackingListId}
+            inventoryEditMode={inventoryEditMode}
             dispatch={dispatch}
           />
         ))}
@@ -927,32 +959,39 @@ function InventoryView({ categories, items, activePackingListId, dispatch }: Vie
                   item={item}
                   viewLocation="inventory"
                   activePackingListId={activePackingListId}
+                  inventoryEditMode={inventoryEditMode}
                   dispatch={dispatch}
                 />
               ))}
-              <AddForm
-                placeholder="Add item here…"
-                onAdd={name =>
-                  dispatch({ type: 'ADD_ITEM', name, categoryId: null, packingListId: null })
-                }
-                className="cat-add-item"
-              />
+              {inventoryEditMode && (
+                <AddForm
+                  placeholder="Add item here…"
+                  onAdd={name =>
+                    dispatch({ type: 'ADD_ITEM', name, categoryId: null, packingListId: null })
+                  }
+                  className="cat-add-item"
+                />
+              )}
             </div>
           </div>
         )}
 
-        <AddForm
-          placeholder="Add item to inventory…"
-          onAdd={name =>
-            dispatch({ type: 'ADD_ITEM', name, categoryId: null, packingListId: null })
-          }
-          className="root-add"
-        />
-        <AddForm
-          placeholder="Add category…"
-          onAdd={name => dispatch({ type: 'ADD_CATEGORY', name, parentId: null })}
-          className="root-add"
-        />
+        {inventoryEditMode && (
+          <AddForm
+            placeholder="Add item to inventory…"
+            onAdd={name =>
+              dispatch({ type: 'ADD_ITEM', name, categoryId: null, packingListId: null })
+            }
+            className="root-add"
+          />
+        )}
+        {inventoryEditMode && (
+          <AddForm
+            placeholder="Add category…"
+            onAdd={name => dispatch({ type: 'ADD_CATEGORY', name, parentId: null })}
+            className="root-add"
+          />
+        )}
       </div>
     </DragProvider>
   );
@@ -960,36 +999,124 @@ function InventoryView({ categories, items, activePackingListId, dispatch }: Vie
 
 // ── InventoryBar ──────────────────────────────────────────────────────────────
 
+function InventoryListEditorModal({
+  inventories,
+  dispatch,
+  onClose,
+}: {
+  inventories: { id: string; name: string }[];
+  dispatch: React.Dispatch<Action>;
+  onClose: () => void;
+}) {
+  const [newInventoryName, setNewInventoryName] = useState('');
+
+  function handleAddInventory(e: React.FormEvent) {
+    e.preventDefault();
+    const name = newInventoryName.trim();
+    if (!name) return;
+    dispatch({ type: 'ADD_INVENTORY', name });
+    setNewInventoryName('');
+  }
+
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Edit stuff lists">
+      <div className="modal">
+        <h2 className="modal-title">Edit lists</h2>
+        <div className="inventory-editor-list">
+          {inventories.map((inv, idx) => (
+            <div key={inv.id} className="inventory-editor-row">
+              <button
+                type="button"
+                className="btn-icon"
+                onClick={() => {
+                  const prev = inventories[idx - 1];
+                  if (!prev) return;
+                  dispatch({ type: 'REORDER_INVENTORY', id: inv.id, targetId: prev.id, position: 'before' });
+                }}
+                disabled={idx === 0}
+                aria-label={`Move ${inv.name} up`}
+                title="Move up"
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                className="btn-icon"
+                onClick={() => {
+                  const next = inventories[idx + 1];
+                  if (!next) return;
+                  dispatch({ type: 'REORDER_INVENTORY', id: inv.id, targetId: next.id, position: 'after' });
+                }}
+                disabled={idx === inventories.length - 1}
+                aria-label={`Move ${inv.name} down`}
+                title="Move down"
+              >
+                ↓
+              </button>
+              <InlineEdit
+                value={inv.name}
+                onSave={name => dispatch({ type: 'RENAME_INVENTORY', id: inv.id, name })}
+                className="inventory-editor-name"
+              />
+              <button
+                type="button"
+                className="btn-icon danger"
+                onClick={() => {
+                  if (inventories.length <= 1) return;
+                  if (window.confirm(`Delete list "${inv.name}" and all its contents?`)) {
+                    dispatch({ type: 'DELETE_INVENTORY', id: inv.id });
+                  }
+                }}
+                disabled={inventories.length <= 1}
+                aria-label={`Delete ${inv.name}`}
+                title="Delete list"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+        <form className="modal-form" onSubmit={handleAddInventory}>
+          <input
+            className="modal-input"
+            value={newInventoryName}
+            onChange={e => setNewInventoryName(e.target.value)}
+            placeholder="New list name…"
+          />
+          <div className="modal-actions">
+            <button type="submit" className="btn-primary">Add list</button>
+            <button type="button" className="btn-ghost" onClick={onClose}>Close</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function InventoryBar({
   inventories,
   activeInventoryId,
+  inventoryEditMode,
+  onToggleInventoryEditMode,
+  onOpenInventoryEditor,
   dispatch,
 }: {
   inventories: { id: string; name: string }[];
   activeInventoryId: string;
+  inventoryEditMode: boolean;
+  onToggleInventoryEditMode: () => void;
+  onOpenInventoryEditor: () => void;
   dispatch: React.Dispatch<Action>;
 }) {
-  function handleAdd() {
-    const name = window.prompt('New inventory name:');
-    if (name?.trim()) dispatch({ type: 'ADD_INVENTORY', name: name.trim() });
-  }
+  const EDIT_LISTS_OPTION = '__edit_lists__';
+  const EDIT_MODE_TOGGLE_ID = 'inventory-edit-mode-toggle';
 
-  function handleRename() {
-    const inv = inventories.find(i => i.id === activeInventoryId);
-    if (!inv) return;
-    const name = window.prompt('Rename inventory:', inv.name);
-    if (name?.trim() && name.trim() !== inv.name) {
-      dispatch({ type: 'RENAME_INVENTORY', id: activeInventoryId, name: name.trim() });
+  function handleSelectChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    if (e.target.value === EDIT_LISTS_OPTION) {
+      onOpenInventoryEditor();
+      return;
     }
-  }
-
-  function handleDelete() {
-    if (inventories.length <= 1) return;
-    const inv = inventories.find(i => i.id === activeInventoryId);
-    if (!inv) return;
-    if (window.confirm(`Delete inventory "${inv.name}" and all its contents?`)) {
-      dispatch({ type: 'DELETE_INVENTORY', id: activeInventoryId });
-    }
+    dispatch({ type: 'SELECT_INVENTORY', id: e.target.value });
   }
 
   return (
@@ -997,21 +1124,25 @@ function InventoryBar({
       <span className="selector-label">Inventory</span>
       <select
         value={activeInventoryId}
-        onChange={e => dispatch({ type: 'SELECT_INVENTORY', id: e.target.value })}
+        onChange={handleSelectChange}
         className="selector-select"
       >
         {inventories.map(inv => (
           <option key={inv.id} value={inv.id}>{inv.name}</option>
         ))}
+        <option value={EDIT_LISTS_OPTION}>Edit lists…</option>
       </select>
-      <button className="btn-icon" onClick={handleRename} title="Rename inventory">✏</button>
-      <button className="btn-icon" onClick={handleAdd} title="Add inventory">+</button>
-      <button
-        className="btn-icon danger"
-        onClick={handleDelete}
-        disabled={inventories.length <= 1}
-        title="Delete inventory"
-      >✕</button>
+      <label className="selector-label" htmlFor={EDIT_MODE_TOGGLE_ID}>Edit mode</label>
+      <span className="apple-toggle" title="Toggle edit mode">
+        <input
+          id={EDIT_MODE_TOGGLE_ID}
+          type="checkbox"
+          checked={inventoryEditMode}
+          onChange={onToggleInventoryEditMode}
+          aria-label="Toggle edit mode"
+        />
+        <span className="apple-toggle-slider" />
+      </span>
     </div>
   );
 }
@@ -1099,6 +1230,8 @@ export default function App() {
   const { state, dispatch } = useStore();
   const importInputRef = useRef<HTMLInputElement>(null);
   const [importCandidateState, setImportCandidateState] = useState<AppState | null>(null);
+  const [inventoryEditMode, setInventoryEditMode] = useState(false);
+  const [isInventoryEditorOpen, setIsInventoryEditorOpen] = useState(false);
 
   // ── Sync state ──────────────────────────────────────────────────────────────
 
@@ -1273,6 +1406,9 @@ export default function App() {
       <InventoryBar
         inventories={state.inventories}
         activeInventoryId={state.activeInventoryId}
+        inventoryEditMode={inventoryEditMode}
+        onToggleInventoryEditMode={() => setInventoryEditMode(v => !v)}
+        onOpenInventoryEditor={() => setIsInventoryEditorOpen(true)}
         dispatch={dispatch}
       />
       <main className="app-main">
@@ -1291,10 +1427,18 @@ export default function App() {
             categories={categories}
             items={items}
             activePackingListId={activePackingListId}
+            inventoryEditMode={inventoryEditMode}
             dispatch={dispatch}
           />
         )}
       </main>
+      {isInventoryEditorOpen && (
+        <InventoryListEditorModal
+          inventories={state.inventories}
+          dispatch={dispatch}
+          onClose={() => setIsInventoryEditorOpen(false)}
+        />
+      )}
       {modalMode && (
         <PasscodeModal
           mode={modalMode}
