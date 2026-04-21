@@ -423,6 +423,17 @@ function reducer(state: AppState, action: Action): AppState {
           inv.id === action.id ? { ...inv, name: action.name.trim() } : inv,
         ),
       };
+    case 'REORDER_INVENTORY': {
+      const inventories = [...state.inventories];
+      const fromIdx = inventories.findIndex(inv => inv.id === action.id);
+      if (fromIdx === -1) return state;
+      const [removed] = inventories.splice(fromIdx, 1);
+      let toIdx = inventories.findIndex(inv => inv.id === action.targetId);
+      if (toIdx === -1) return state;
+      if (action.position === 'after') toIdx += 1;
+      inventories.splice(toIdx, 0, removed);
+      return { ...state, inventories };
+    }
     case 'SELECT_INVENTORY':
       return { ...state, activeInventoryId: action.id };
     case 'ADD_PACKING_LIST': {

@@ -664,7 +664,7 @@ function ItemRow({
             onChange={() => dispatch({ type: 'TOGGLE_CHECK', id: item.id })}
           />
         )}
-        {canEditInventory && (
+        {viewLocation === 'inventory' && (
           <button
             className={`btn-move pack${item.packingListId !== null ? ' packed-out' : ''}`}
             onClick={() => {
@@ -685,20 +685,22 @@ function ItemRow({
           editable={canEditInventory}
           className="item-name"
         />
-        <div className="item-count">
-          <button
-            className="count-btn"
-            onClick={() => dispatch({ type: 'SET_ITEM_COUNT', id: item.id, count: item.count - 1 })}
-            aria-label="Decrease count"
-            disabled={item.count <= 1}
-          >−</button>
-          <span className="count-value">{item.count}</span>
-          <button
-            className="count-btn"
-            onClick={() => dispatch({ type: 'SET_ITEM_COUNT', id: item.id, count: item.count + 1 })}
-            aria-label="Increase count"
-          >+</button>
-        </div>
+        {viewLocation === 'packing' && (
+          <div className="item-count">
+            <button
+              className="count-btn"
+              onClick={() => dispatch({ type: 'SET_ITEM_COUNT', id: item.id, count: item.count - 1 })}
+              aria-label="Decrease count"
+              disabled={item.count <= 1}
+            >−</button>
+            <span className="count-value">{item.count}</span>
+            <button
+              className="count-btn"
+              onClick={() => dispatch({ type: 'SET_ITEM_COUNT', id: item.id, count: item.count + 1 })}
+              aria-label="Increase count"
+            >+</button>
+          </div>
+        )}
         <div className="item-actions">
           {viewLocation === 'packing' ? (
             <button
@@ -776,7 +778,6 @@ interface ViewProps {
   items: Item[];
   activePackingListId: string | null;
   inventoryEditMode?: boolean;
-  onToggleInventoryEditMode?: () => void;
   dispatch: React.Dispatch<Action>;
 }
 
@@ -922,7 +923,6 @@ function InventoryView({
   items,
   activePackingListId,
   inventoryEditMode = false,
-  onToggleInventoryEditMode,
   dispatch,
 }: ViewProps) {
   const rootCategories = categories.filter(c => c.parentId === null);
@@ -933,14 +933,6 @@ function InventoryView({
   return (
     <DragProvider categories={categories} items={items} dispatch={dispatch}>
       <div className="view">
-        <div className="inventory-actions">
-          <button
-            className={inventoryEditMode ? 'btn-primary' : 'btn-secondary'}
-            onClick={onToggleInventoryEditMode}
-          >
-            {inventoryEditMode ? 'Turn Edit Mode Off' : 'Turn Edit Mode On'}
-          </button>
-        </div>
         {rootCategories.map(cat => (
           <CategoryTree
             key={cat.id}
@@ -1007,36 +999,123 @@ function InventoryView({
 
 // ── InventoryBar ──────────────────────────────────────────────────────────────
 
+function InventoryListEditorModal({
+  inventories,
+  dispatch,
+  onClose,
+}: {
+  inventories: { id: string; name: string }[];
+  dispatch: React.Dispatch<Action>;
+  onClose: () => void;
+}) {
+  const [newInventoryName, setNewInventoryName] = useState('');
+
+  function handleAddInventory(e: React.FormEvent) {
+    e.preventDefault();
+    const name = newInventoryName.trim();
+    if (!name) return;
+    dispatch({ type: 'ADD_INVENTORY', name });
+    setNewInventoryName('');
+  }
+
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Edit stuff lists">
+      <div className="modal">
+        <h2 className="modal-title">Edit lists</h2>
+        <div className="inventory-editor-list">
+          {inventories.map((inv, idx) => (
+            <div key={inv.id} className="inventory-editor-row">
+              <button
+                type="button"
+                className="btn-icon"
+                onClick={() => {
+                  const prev = inventories[idx - 1];
+                  if (!prev) return;
+                  dispatch({ type: 'REORDER_INVENTORY', id: inv.id, targetId: prev.id, position: 'before' });
+                }}
+                disabled={idx === 0}
+                aria-label={`Move ${inv.name} up`}
+                title="Move up"
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                className="btn-icon"
+                onClick={() => {
+                  const next = inventories[idx + 1];
+                  if (!next) return;
+                  dispatch({ type: 'REORDER_INVENTORY', id: inv.id, targetId: next.id, position: 'after' });
+                }}
+                disabled={idx === inventories.length - 1}
+                aria-label={`Move ${inv.name} down`}
+                title="Move down"
+              >
+                ↓
+              </button>
+              <InlineEdit
+                value={inv.name}
+                onSave={name => dispatch({ type: 'RENAME_INVENTORY', id: inv.id, name })}
+                className="inventory-editor-name"
+              />
+              <button
+                type="button"
+                className="btn-icon danger"
+                onClick={() => {
+                  if (inventories.length <= 1) return;
+                  if (window.confirm(`Delete list "${inv.name}" and all its contents?`)) {
+                    dispatch({ type: 'DELETE_INVENTORY', id: inv.id });
+                  }
+                }}
+                disabled={inventories.length <= 1}
+                aria-label={`Delete ${inv.name}`}
+                title="Delete list"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+        <form className="modal-form" onSubmit={handleAddInventory}>
+          <input
+            className="modal-input"
+            value={newInventoryName}
+            onChange={e => setNewInventoryName(e.target.value)}
+            placeholder="New list name…"
+          />
+          <div className="modal-actions">
+            <button type="submit" className="btn-primary">Add list</button>
+            <button type="button" className="btn-ghost" onClick={onClose}>Close</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function InventoryBar({
   inventories,
   activeInventoryId,
+  inventoryEditMode,
+  onToggleInventoryEditMode,
+  onOpenInventoryEditor,
   dispatch,
 }: {
   inventories: { id: string; name: string }[];
   activeInventoryId: string;
+  inventoryEditMode: boolean;
+  onToggleInventoryEditMode: () => void;
+  onOpenInventoryEditor: () => void;
   dispatch: React.Dispatch<Action>;
 }) {
-  function handleAdd() {
-    const name = window.prompt('New inventory name:');
-    if (name?.trim()) dispatch({ type: 'ADD_INVENTORY', name: name.trim() });
-  }
+  const EDIT_LISTS_OPTION = '__edit_lists__';
 
-  function handleRename() {
-    const inv = inventories.find(i => i.id === activeInventoryId);
-    if (!inv) return;
-    const name = window.prompt('Rename inventory:', inv.name);
-    if (name?.trim() && name.trim() !== inv.name) {
-      dispatch({ type: 'RENAME_INVENTORY', id: activeInventoryId, name: name.trim() });
+  function handleSelectChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    if (e.target.value === EDIT_LISTS_OPTION) {
+      onOpenInventoryEditor();
+      return;
     }
-  }
-
-  function handleDelete() {
-    if (inventories.length <= 1) return;
-    const inv = inventories.find(i => i.id === activeInventoryId);
-    if (!inv) return;
-    if (window.confirm(`Delete inventory "${inv.name}" and all its contents?`)) {
-      dispatch({ type: 'DELETE_INVENTORY', id: activeInventoryId });
-    }
+    dispatch({ type: 'SELECT_INVENTORY', id: e.target.value });
   }
 
   return (
@@ -1044,21 +1123,23 @@ function InventoryBar({
       <span className="selector-label">Inventory</span>
       <select
         value={activeInventoryId}
-        onChange={e => dispatch({ type: 'SELECT_INVENTORY', id: e.target.value })}
+        onChange={handleSelectChange}
         className="selector-select"
       >
         {inventories.map(inv => (
           <option key={inv.id} value={inv.id}>{inv.name}</option>
         ))}
+        <option value={EDIT_LISTS_OPTION}>Edit lists…</option>
       </select>
-      <button className="btn-icon" onClick={handleRename} title="Rename inventory">✏</button>
-      <button className="btn-icon" onClick={handleAdd} title="Add inventory">+</button>
-      <button
-        className="btn-icon danger"
-        onClick={handleDelete}
-        disabled={inventories.length <= 1}
-        title="Delete inventory"
-      >✕</button>
+      <label className="apple-toggle" title="Toggle edit mode">
+        <input
+          type="checkbox"
+          checked={inventoryEditMode}
+          onChange={onToggleInventoryEditMode}
+          aria-label="Toggle edit mode"
+        />
+        <span className="apple-toggle-slider" />
+      </label>
     </div>
   );
 }
@@ -1147,6 +1228,7 @@ export default function App() {
   const importInputRef = useRef<HTMLInputElement>(null);
   const [importCandidateState, setImportCandidateState] = useState<AppState | null>(null);
   const [inventoryEditMode, setInventoryEditMode] = useState(false);
+  const [isInventoryEditorOpen, setIsInventoryEditorOpen] = useState(false);
 
   // ── Sync state ──────────────────────────────────────────────────────────────
 
@@ -1321,6 +1403,9 @@ export default function App() {
       <InventoryBar
         inventories={state.inventories}
         activeInventoryId={state.activeInventoryId}
+        inventoryEditMode={inventoryEditMode}
+        onToggleInventoryEditMode={() => setInventoryEditMode(v => !v)}
+        onOpenInventoryEditor={() => setIsInventoryEditorOpen(true)}
         dispatch={dispatch}
       />
       <main className="app-main">
@@ -1340,11 +1425,17 @@ export default function App() {
             items={items}
             activePackingListId={activePackingListId}
             inventoryEditMode={inventoryEditMode}
-            onToggleInventoryEditMode={() => setInventoryEditMode(v => !v)}
             dispatch={dispatch}
           />
         )}
       </main>
+      {isInventoryEditorOpen && (
+        <InventoryListEditorModal
+          inventories={state.inventories}
+          dispatch={dispatch}
+          onClose={() => setIsInventoryEditorOpen(false)}
+        />
+      )}
       {modalMode && (
         <PasscodeModal
           mode={modalMode}
