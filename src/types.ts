@@ -10,6 +10,8 @@ export interface Item {
   packingListId: string | null;
   /** null = not assigned to a bag; non-null = id of the container category used as a bag */
   bagCategoryId: string | null;
+  /** weight in grams; null = not specified */
+  weightG: number | null;
 }
 
 export interface Category {
@@ -23,6 +25,8 @@ export interface Category {
   bagCategoryId: string | null;
   /** null = regular inventory category; non-null = packing-list id this bag belongs to (pure bag, hidden from inventory) */
   packingListId: string | null;
+  /** weight of the container/bag itself in grams; null = not specified */
+  weightG: number | null;
 }
 
 export interface PackingList {
@@ -65,6 +69,8 @@ export type Action =
   | { type: 'SET_CATEGORY_BAG'; id: string; bagCategoryId: string | null }
   | { type: 'CLEAR_CHECKS' }
   | { type: 'SET_ITEM_COUNT'; id: string; count: number }
+  | { type: 'SET_ITEM_WEIGHT'; id: string; weightG: number | null }
+  | { type: 'SET_CATEGORY_WEIGHT'; id: string; weightG: number | null }
   | { type: 'SET_TAB'; tab: Location }
   | { type: 'NEW_TRIP' }
   | { type: 'ADD_INVENTORY'; name: string }
