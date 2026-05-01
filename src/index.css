@@ -550,6 +550,7 @@ input {
 .inventory-bar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 7px 12px;
   background: #edf7f2; /* fallback */
@@ -783,6 +784,99 @@ input {
   font-size: 0.82rem;
   color: var(--color-text-muted);
   font-style: italic;
+}
+
+/* ── Weight Display ──────────────────────────────────────────────────────────── */
+.item-weight {
+  font-size: 0.75rem;
+  color: #aac4b5;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.item-weight-editable {
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  padding: 1px 4px;
+  margin: -1px -4px;
+  transition: background 0.1s, color 0.1s;
+}
+.item-weight-editable:hover {
+  background: color-mix(in srgb, var(--color-secondary) 12%, transparent);
+  color: var(--color-text-muted);
+}
+
+.item-weight-empty {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.category-header:hover .item-weight-empty,
+.item-row:hover .item-weight-empty {
+  opacity: 1;
+}
+
+.weight-input {
+  width: 56px;
+  padding: 2px 5px;
+  border: 1.5px solid var(--color-secondary);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 0.8rem;
+  outline: none;
+  flex-shrink: 0;
+}
+.weight-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 20%, transparent);
+}
+
+.weight-lbs-inputs {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.weight-input-lb {
+  width: 44px;
+}
+.weight-input-oz {
+  width: 50px;
+}
+
+.weight-unit-label {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.weight-unit-select {
+  padding: 2px 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  outline: none;
+  flex-shrink: 0;
+}
+.weight-unit-select:focus {
+  border-color: var(--color-primary);
+}
+
+.total-weight {
+  margin: 0 4px 6px;
+  padding: 7px 12px;
+  background: color-mix(in srgb, var(--color-secondary) 10%, var(--color-surface));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font-size: 0.88rem;
+  color: var(--color-text-muted);
+}
+.total-weight strong {
+  color: var(--color-primary);
 }
 
 ::-webkit-scrollbar {

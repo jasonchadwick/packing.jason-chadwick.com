@@ -253,6 +253,7 @@ function reducer(state: AppState, action: Action): AppState {
         categoryId: action.categoryId,
         bagCategoryId: null,
         packingListId: action.packingListId,
+        weightG: null,
       };
       return updateActiveInventory(state, inv => ({
         ...inv,
@@ -297,6 +298,7 @@ function reducer(state: AppState, action: Action): AppState {
         packed: false,
         bagCategoryId: null,
         packingListId: action.packingListId ?? null,
+        weightG: null,
       };
       return updateActiveInventory(state, inv => ({
         ...inv,
@@ -421,6 +423,20 @@ function reducer(state: AppState, action: Action): AppState {
           i.id === action.id
             ? { ...i, count: Number.isFinite(action.count) ? Math.max(1, action.count) : 1 }
             : i,
+        ),
+      }));
+    case 'SET_ITEM_WEIGHT':
+      return updateActiveInventory(state, inv => ({
+        ...inv,
+        items: inv.items.map(i =>
+          i.id === action.id ? { ...i, weightG: action.weightG } : i,
+        ),
+      }));
+    case 'SET_CATEGORY_WEIGHT':
+      return updateActiveInventory(state, inv => ({
+        ...inv,
+        categories: inv.categories.map(c =>
+          c.id === action.id ? { ...c, weightG: action.weightG } : c,
         ),
       }));
     case 'TOGGLE_BAG_PACKED': {

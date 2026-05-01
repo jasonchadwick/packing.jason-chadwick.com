@@ -180,6 +180,157 @@ function DragProvider({
   return <DragContext.Provider value={ctx}>{children}</DragContext.Provider>;
 }
 
+// ── Weight Context ────────────────────────────────────────────────────────────
+
+interface WeightCtx {
+  showWeights: boolean;
+  weightUnit: 'g' | 'lbs';
+}
+
+const WeightContext = createContext<WeightCtx>({ showWeights: false, weightUnit: 'g' });
+
+/** Minimum oz value to display separately from lbs (avoids "1lb 0.0oz") */
+const MIN_OZ_DISPLAY = 0.05;
+
+function formatWeight(g: number, unit: 'g' | 'lbs'): string {
+  if (unit === 'g') {
+    return g >= 1000 ? `${parseFloat((g / 1000).toFixed(2))}kg` : `${Math.round(g)}g`;
+  }
+  const totalOz = g / 28.3495;
+  const lbs = Math.floor(totalOz / 16);
+  const oz = totalOz % 16;
+  if (lbs === 0) return `${parseFloat(oz.toFixed(1))}oz`;
+  if (oz < MIN_OZ_DISPLAY) return `${lbs}lb`;
+  return `${lbs}lb ${parseFloat(oz.toFixed(1))}oz`;
+}
+
+function parseWeightGrams(value: string): number | null {
+  const v = parseFloat(value);
+  if (value.trim() === '' || isNaN(v) || v < 0) return null;
+  return v;
+}
+
+interface WeightEditProps {
+  weightG: number | null;
+  editable: boolean;
+  onSave: (g: number | null) => void;
+}
+
+function WeightEdit({ weightG, editable, onSave }: WeightEditProps) {
+  const { showWeights, weightUnit } = useContext(WeightContext);
+  const [editing, setEditing] = useState(false);
+  const [draftG, setDraftG] = useState('');
+  const [draftLbs, setDraftLbs] = useState('');
+  const [draftOz, setDraftOz] = useState('');
+
+  if (!showWeights) return null;
+
+  function startEditing() {
+    if (!editable) return;
+    setEditing(true);
+    if (weightUnit === 'g') {
+      setDraftG(weightG !== null ? String(Math.round(weightG)) : '');
+    } else {
+      if (weightG !== null) {
+        const totalOz = weightG / 28.3495;
+        setDraftLbs(String(Math.floor(totalOz / 16)));
+        setDraftOz(parseFloat((totalOz % 16).toFixed(1)).toString());
+      } else {
+        setDraftLbs('');
+        setDraftOz('');
+      }
+    }
+  }
+
+  function commitG() {
+    onSave(parseWeightGrams(draftG));
+    setEditing(false);
+  }
+
+  function commitLbs(e?: React.FocusEvent) {
+    if (e) {
+      const related = e.relatedTarget as HTMLElement | null;
+      if (related?.closest('.weight-lbs-inputs')) return;
+    }
+    const lbs = parseFloat(draftLbs) || 0;
+    const oz = parseFloat(draftOz) || 0;
+    if (draftLbs === '' && draftOz === '') {
+      onSave(null);
+    } else {
+      onSave((lbs * 16 + oz) * 28.3495);
+    }
+    setEditing(false);
+  }
+
+  if (editing) {
+    if (weightUnit === 'g') {
+      return (
+        <input
+          autoFocus
+          className="weight-input"
+          type="number"
+          min="0"
+          placeholder="g"
+          value={draftG}
+          onChange={e => setDraftG(e.target.value)}
+          onBlur={commitG}
+          onKeyDown={e => {
+            if (e.key === 'Enter') commitG();
+            if (e.key === 'Escape') setEditing(false);
+          }}
+          onClick={e => e.stopPropagation()}
+        />
+      );
+    }
+    return (
+      <span className="weight-lbs-inputs" onClick={e => e.stopPropagation()}>
+        <input
+          autoFocus
+          className="weight-input weight-input-lb"
+          type="number"
+          min="0"
+          placeholder="lb"
+          value={draftLbs}
+          onChange={e => setDraftLbs(e.target.value)}
+          onBlur={commitLbs}
+          onKeyDown={e => {
+            if (e.key === 'Enter') commitLbs();
+            if (e.key === 'Escape') setEditing(false);
+          }}
+        />
+        <span className="weight-unit-label">lb</span>
+        <input
+          className="weight-input weight-input-oz"
+          type="number"
+          min="0"
+          max="16"
+          step="0.1"
+          placeholder="oz"
+          value={draftOz}
+          onChange={e => setDraftOz(e.target.value)}
+          onBlur={commitLbs}
+          onKeyDown={e => {
+            if (e.key === 'Enter') commitLbs();
+            if (e.key === 'Escape') setEditing(false);
+          }}
+        />
+        <span className="weight-unit-label">oz</span>
+      </span>
+    );
+  }
+
+  const hasWeight = weightG !== null && weightG > 0;
+  return (
+    <span
+      className={`item-weight${editable ? ' item-weight-editable' : ''}${!hasWeight && editable ? ' item-weight-empty' : ''}`}
+      onClick={startEditing}
+      title={editable ? 'Click to set weight' : undefined}
+    >
+      {hasWeight ? formatWeight(weightG!, weightUnit) : editable ? '+ weight' : null}
+    </span>
+  );
+}
+
 // ── InlineEdit ────────────────────────────────────────────────────────────────
 
 interface InlineEditProps {
@@ -384,6 +535,11 @@ function CategoryTree({
           onSave={name => dispatch({ type: 'RENAME_CATEGORY', id: category.id, name })}
           editable={canEditInventory}
           className={`category-name${viewLocation === 'packing' && category.isContainer && category.packed ? ' packed' : ''}`}
+        />
+        <WeightEdit
+          weightG={category.weightG}
+          editable={canEditInventory}
+          onSave={g => dispatch({ type: 'SET_CATEGORY_WEIGHT', id: category.id, weightG: g })}
         />
         {viewLocation === 'inventory' && subtreeCount > 0 && (
           <span className="badge">{subtreeCount}</span>
@@ -685,6 +841,11 @@ function ItemRow({
           editable={canEditInventory}
           className="item-name"
         />
+        <WeightEdit
+          weightG={item.weightG}
+          editable={canEditInventory}
+          onSave={g => dispatch({ type: 'SET_ITEM_WEIGHT', id: item.id, weightG: g })}
+        />
         {viewLocation === 'packing' && (
           <div className="item-count">
             <button
@@ -803,6 +964,11 @@ function BagItemRow({ item, bags, showBagSelector, dispatch }: BagItemRowProps) 
         onChange={() => dispatch({ type: 'TOGGLE_CHECK', id: item.id })}
       />
       <span className="item-name">{item.name}</span>
+      <WeightEdit
+        weightG={item.weightG}
+        editable={false}
+        onSave={g => dispatch({ type: 'SET_ITEM_WEIGHT', id: item.id, weightG: g })}
+      />
       <div className="item-count">
         <button
           className="count-btn"
@@ -918,6 +1084,11 @@ function BagSection({ bag, allCategories, allBags, packingItems, looseItems, dep
           onSave={name => dispatch({ type: 'RENAME_CATEGORY', id: bag.id, name })}
           editable={inventoryEditMode && isPureBag}
           className={`category-name${bag.packed ? ' packed' : ''}`}
+        />
+        <WeightEdit
+          weightG={bag.weightG}
+          editable={inventoryEditMode}
+          onSave={g => dispatch({ type: 'SET_CATEGORY_WEIGHT', id: bag.id, weightG: g })}
         />
         {directTotal > 0 && (
           <span className="badge">{directChecked}/{directTotal}</span>
@@ -1128,8 +1299,6 @@ interface ViewProps {
 
 interface PackingViewProps extends ViewProps {
   packingLists: PackingList[];
-  viewMode: 'category' | 'bag';
-  onSetViewMode: (mode: 'category' | 'bag') => void;
   inventoryEditMode: boolean;
   onNewTrip: () => void;
   onClearChecks: () => void;
@@ -1183,19 +1352,27 @@ function PackingView({
   items,
   activePackingListId,
   packingLists,
-  viewMode,
-  onSetViewMode,
   inventoryEditMode,
   dispatch,
   onNewTrip,
   onClearChecks,
   onOpenPackingListEditor,
 }: PackingViewProps) {
-  // Exclude pure bags from category view (they live in bag view only)
-  const rootCategories = categories.filter(c => c.parentId === null && c.packingListId === null);
-  const uncategorized = items.filter(
-    i => i.packingListId === activePackingListId && i.categoryId === null,
-  );
+  const { showWeights, weightUnit } = useContext(WeightContext);
+
+  // Total weight: sum of (item.weightG * count) for packed items + bag/container weights
+  const totalWeightG = useMemo(() => {
+    const packingItems = items.filter(i => i.packingListId === activePackingListId);
+    const allBags = categories.filter(
+      c => c.isContainer && (c.packingListId === null || c.packingListId === activePackingListId),
+    );
+    const hasAnyWeight =
+      packingItems.some(i => i.weightG !== null) || allBags.some(c => c.weightG !== null);
+    if (!hasAnyWeight) return null;
+    const itemTotal = packingItems.reduce((sum, i) => sum + (i.weightG ?? 0) * i.count, 0);
+    const bagTotal = allBags.reduce((sum, c) => sum + (c.weightG ?? 0), 0);
+    return itemTotal + bagTotal;
+  }, [items, categories, activePackingListId]);
 
   return (
     <DragProvider categories={categories} items={items} dispatch={dispatch}>
@@ -1206,22 +1383,6 @@ function PackingView({
           onOpenPackingListEditor={onOpenPackingListEditor}
           dispatch={dispatch}
         />
-        <div className="view-mode-toggle" role="group" aria-label="Packing view mode">
-          <button
-            className={`view-mode-btn${viewMode === 'category' ? ' active' : ''}`}
-            onClick={() => onSetViewMode('category')}
-            aria-pressed={viewMode === 'category'}
-          >
-            Category
-          </button>
-          <button
-            className={`view-mode-btn${viewMode === 'bag' ? ' active' : ''}`}
-            onClick={() => onSetViewMode('bag')}
-            aria-pressed={viewMode === 'bag'}
-          >
-            Bag
-          </button>
-        </div>
         <div className="packing-actions">
           <button className="btn-secondary" onClick={onClearChecks}>
             Clear Checks
@@ -1230,50 +1391,18 @@ function PackingView({
             New Trip
           </button>
         </div>
-
-        {viewMode === 'category' ? (
-          <>
-            {rootCategories.map(cat => (
-              <CategoryTree
-                key={cat.id}
-                category={cat}
-                allCategories={categories}
-                items={items}
-                depth={0}
-                viewLocation="packing"
-                activePackingListId={activePackingListId}
-                dispatch={dispatch}
-              />
-            ))}
-
-            {uncategorized.length > 0 && (
-              <div className="category-block uncategorized" style={{ '--depth': 0 } as React.CSSProperties}>
-                <div className="category-header">
-                  <span className="category-name muted">Uncategorized</span>
-                </div>
-                <div className="category-body">
-                  {uncategorized.map(item => (
-                    <ItemRow
-                      key={item.id}
-                      item={item}
-                      viewLocation="packing"
-                      activePackingListId={activePackingListId}
-                      dispatch={dispatch}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-          </>
-        ) : (
-          <BagView
-            categories={categories}
-            items={items}
-            activePackingListId={activePackingListId}
-            inventoryEditMode={inventoryEditMode}
-            dispatch={dispatch}
-          />
+        {showWeights && totalWeightG !== null && (
+          <div className="total-weight">
+            Total weight: <strong>{formatWeight(totalWeightG, weightUnit)}</strong>
+          </div>
         )}
+        <BagView
+          categories={categories}
+          items={items}
+          activePackingListId={activePackingListId}
+          inventoryEditMode={inventoryEditMode}
+          dispatch={dispatch}
+        />
       </div>
     </DragProvider>
   );
@@ -1529,6 +1658,10 @@ function InventoryBar({
   activeInventoryId,
   inventoryEditMode,
   onToggleInventoryEditMode,
+  showWeights,
+  onToggleShowWeights,
+  weightUnit,
+  onSetWeightUnit,
   onOpenInventoryEditor,
   dispatch,
 }: {
@@ -1536,11 +1669,16 @@ function InventoryBar({
   activeInventoryId: string;
   inventoryEditMode: boolean;
   onToggleInventoryEditMode: () => void;
+  showWeights: boolean;
+  onToggleShowWeights: () => void;
+  weightUnit: 'g' | 'lbs';
+  onSetWeightUnit: (u: 'g' | 'lbs') => void;
   onOpenInventoryEditor: () => void;
   dispatch: React.Dispatch<Action>;
 }) {
   const EDIT_LISTS_OPTION = '__edit_lists__';
   const EDIT_MODE_TOGGLE_ID = 'inventory-edit-mode-toggle';
+  const SHOW_WEIGHTS_TOGGLE_ID = 'show-weights-toggle';
 
   function handleSelectChange(e: React.ChangeEvent<HTMLSelectElement>) {
     if (e.target.value === EDIT_LISTS_OPTION) {
@@ -1563,7 +1701,7 @@ function InventoryBar({
         ))}
         <option value={EDIT_LISTS_OPTION}>Edit lists…</option>
       </select>
-      <span className="selector-label">Edit mode</span>
+      <span className="selector-label">Edit</span>
       <label className="apple-toggle" title="Toggle edit mode">
         <input
           id={EDIT_MODE_TOGGLE_ID}
@@ -1574,6 +1712,29 @@ function InventoryBar({
         />
         <span className="apple-toggle-slider" />
       </label>
+      <span className="selector-label">Weights</span>
+      <label className="apple-toggle" title="Toggle weight display">
+        <input
+          id={SHOW_WEIGHTS_TOGGLE_ID}
+          type="checkbox"
+          checked={showWeights}
+          onChange={onToggleShowWeights}
+          aria-label="Toggle weight display"
+        />
+        <span className="apple-toggle-slider" />
+      </label>
+      {showWeights && (
+        <select
+          className="weight-unit-select"
+          value={weightUnit}
+          onChange={e => onSetWeightUnit(e.target.value as 'g' | 'lbs')}
+          aria-label="Weight unit"
+          title="Weight unit"
+        >
+          <option value="g">g</option>
+          <option value="lbs">lbs</option>
+        </select>
+      )}
     </div>
   );
 }
@@ -1664,7 +1825,23 @@ export default function App() {
   const [inventoryEditMode, setInventoryEditMode] = useState(false);
   const [isInventoryEditorOpen, setIsInventoryEditorOpen] = useState(false);
   const [isPackingListEditorOpen, setIsPackingListEditorOpen] = useState(false);
-  const [packingViewMode, setPackingViewMode] = useState<'category' | 'bag'>('category');
+  const [showWeights, setShowWeights] = useState(() => localStorage.getItem('show-weights') === 'true');
+  const [weightUnit, setWeightUnit] = useState<'g' | 'lbs'>(() =>
+    localStorage.getItem('weight-unit') === 'lbs' ? 'lbs' : 'g',
+  );
+
+  function handleToggleShowWeights() {
+    setShowWeights(v => {
+      const next = !v;
+      localStorage.setItem('show-weights', String(next));
+      return next;
+    });
+  }
+
+  function handleSetWeightUnit(u: 'g' | 'lbs') {
+    setWeightUnit(u);
+    localStorage.setItem('weight-unit', u);
+  }
 
   // ── Sync state ──────────────────────────────────────────────────────────────
 
@@ -1818,6 +1995,7 @@ export default function App() {
   const activePackingListId = activeInventory?.activePackingListId ?? null;
 
   return (
+    <WeightContext.Provider value={{ showWeights, weightUnit }}>
     <div className="app">
       <Header
         syncStatus={syncStatus}
@@ -1841,6 +2019,10 @@ export default function App() {
         activeInventoryId={state.activeInventoryId}
         inventoryEditMode={inventoryEditMode}
         onToggleInventoryEditMode={() => setInventoryEditMode(v => !v)}
+        showWeights={showWeights}
+        onToggleShowWeights={handleToggleShowWeights}
+        weightUnit={weightUnit}
+        onSetWeightUnit={handleSetWeightUnit}
         onOpenInventoryEditor={() => setIsInventoryEditorOpen(true)}
         dispatch={dispatch}
       />
@@ -1851,8 +2033,6 @@ export default function App() {
             items={items}
             activePackingListId={activePackingListId}
             packingLists={packingLists}
-            viewMode={packingViewMode}
-            onSetViewMode={setPackingViewMode}
             inventoryEditMode={inventoryEditMode}
             dispatch={dispatch}
             onNewTrip={handleNewTrip}
@@ -1917,5 +2097,6 @@ export default function App() {
         </div>
       )}
     </div>
+    </WeightContext.Provider>
   );
 }

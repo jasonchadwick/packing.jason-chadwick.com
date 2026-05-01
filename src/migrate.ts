@@ -32,11 +32,11 @@ export function migrateState(raw: RawState): AppState {
     return {
       inventories: raw.inventories.map(inv => ({
         ...inv,
-        categories: (inv.categories as (Omit<Category, 'bagCategoryId' | 'packingListId'> & { bagCategoryId?: string | null; packingListId?: string | null })[]).map(
-          c => ({ bagCategoryId: null, packingListId: null, ...c }),
+        categories: (inv.categories as (Omit<Category, 'bagCategoryId' | 'packingListId' | 'weightG'> & { bagCategoryId?: string | null; packingListId?: string | null; weightG?: number | null })[]).map(
+          c => ({ ...c, bagCategoryId: c.bagCategoryId ?? null, packingListId: c.packingListId ?? null, weightG: c.weightG ?? null }),
         ),
-        items: (inv.items as (Omit<Item, 'count' | 'bagCategoryId'> & { count?: number; bagCategoryId?: string | null })[]).map(
-          i => ({ count: 1, bagCategoryId: null, ...i }),
+        items: (inv.items as (Omit<Item, 'count' | 'bagCategoryId' | 'weightG'> & { count?: number; bagCategoryId?: string | null; weightG?: number | null })[]).map(
+          i => ({ ...i, count: i.count ?? 1, bagCategoryId: i.bagCategoryId ?? null, weightG: i.weightG ?? null }),
         ),
       })),
       activeInventoryId: raw.activeInventoryId ?? raw.inventories[0].id,
@@ -50,9 +50,10 @@ export function migrateState(raw: RawState): AppState {
   const categories: Category[] = (raw.categories ?? []).map(c => ({
     isContainer: false,
     packed: false,
-    bagCategoryId: null,
-    packingListId: null,
+    bagCategoryId: null as string | null,
+    packingListId: null as string | null,
     ...c,
+    weightG: (c as { weightG?: number | null }).weightG ?? null,
   }));
 
   const items: Item[] = (raw.items ?? []).map((i): Item => ({
@@ -62,6 +63,7 @@ export function migrateState(raw: RawState): AppState {
     count: i.count ?? 1,
     categoryId: i.categoryId,
     bagCategoryId: null,
+    weightG: null,
     packingListId:
       i.packingListId !== undefined
         ? i.packingListId
