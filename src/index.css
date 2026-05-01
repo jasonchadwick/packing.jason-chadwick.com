@@ -717,7 +717,74 @@ input {
   }
 }
 
-/* ── Scrollbar ───────────────────────────────────────────────────────────────── */
+/* ── Bag View ─────────────────────────────────────────────────────────────────── */
+.view-mode-toggle {
+  display: flex;
+  gap: 2px;
+  margin: 6px 4px 2px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 3px;
+}
+
+.view-mode-btn {
+  flex: 1;
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+.view-mode-btn:hover {
+  color: var(--color-primary);
+}
+.view-mode-btn.active {
+  background: var(--color-surface);
+  color: var(--color-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.bag-selector {
+  padding: 2px 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: 0.8rem;
+  max-width: 100px;
+  min-width: 60px;
+  cursor: pointer;
+  outline: none;
+  flex-shrink: 0;
+}
+.bag-selector:focus {
+  border-color: var(--color-primary);
+}
+
+.bag-add-form {
+  margin: 8px 4px 0;
+}
+.bag-add-form .add-input {
+  border: 1.5px dashed var(--color-border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+}
+.bag-add-form .add-input:focus {
+  border-color: var(--color-primary);
+  border-style: solid;
+  background: var(--color-surface);
+}
+
+.bag-empty-hint {
+  padding: 6px 10px 4px;
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
 ::-webkit-scrollbar {
   width: 6px;
 }
