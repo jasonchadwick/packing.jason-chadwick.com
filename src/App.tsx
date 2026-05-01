@@ -771,6 +771,19 @@ function ItemRow({
   );
 }
 
+// ── Bag utilities ─────────────────────────────────────────────────────────────
+
+/** Returns the set of IDs of a container and all its bag-view descendants. */
+function getBagViewSubtreeIds(categories: Category[], rootId: string): Set<string> {
+  const result = new Set<string>([rootId]);
+  for (const c of categories) {
+    if (c.isContainer && c.bagCategoryId === rootId) {
+      for (const id of getBagViewSubtreeIds(categories, c.id)) result.add(id);
+    }
+  }
+  return result;
+}
+
 // ── BagItemRow ────────────────────────────────────────────────────────────────
 
 interface BagItemRowProps {
@@ -853,19 +866,12 @@ function BagSection({ bag, allCategories, allBags, packingItems, looseItems, dep
   // Loose items explicitly assigned to this bag
   const assignedLooseItems = looseItems.filter(i => i.bagCategoryId === bag.id);
 
-  const directTotal = containerItems.length + assignedLooseItems.length;
-  const directChecked = containerItems.filter(i => i.checked).length + assignedLooseItems.filter(i => i.checked).length;
+  const directItems = [...containerItems, ...assignedLooseItems];
+  const directTotal = directItems.length;
+  const directChecked = directItems.reduce((n, i) => n + (i.checked ? 1 : 0), 0);
 
-  // Compute valid parent bag options (exclude self and bag-view descendants)
-  const excluded = new Set<string>();
-  // Build subtree using bagCategoryId
-  const computeSubtree = (id: string) => {
-    excluded.add(id);
-    for (const c of allCategories) {
-      if (c.isContainer && c.bagCategoryId === id) computeSubtree(c.id);
-    }
-  };
-  computeSubtree(bag.id);
+  // Compute valid parent bag options (exclude self and bag-view descendants to prevent cycles)
+  const excluded = getBagViewSubtreeIds(allCategories, bag.id);
   const availableParents = allBags.filter(b => !excluded.has(b.id));
 
   const isEmpty = containerItems.length === 0 && subBags.length === 0 && assignedLooseItems.length === 0;
