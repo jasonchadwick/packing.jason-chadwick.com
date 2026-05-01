@@ -949,7 +949,7 @@ function BagSection({ bag, allCategories, allBags, packingItems, looseItems, dep
             ✕
           </button>
         )}
-        {inventoryEditMode && isPureBag && (
+        {inventoryEditMode && (
           <span
             className="drag-handle"
             draggable
