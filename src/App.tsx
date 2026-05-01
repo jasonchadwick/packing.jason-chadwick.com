@@ -189,6 +189,9 @@ interface WeightCtx {
 
 const WeightContext = createContext<WeightCtx>({ showWeights: false, weightUnit: 'g' });
 
+/** Minimum oz value to display separately from lbs (avoids "1lb 0.0oz") */
+const MIN_OZ_DISPLAY = 0.05;
+
 function formatWeight(g: number, unit: 'g' | 'lbs'): string {
   if (unit === 'g') {
     return g >= 1000 ? `${parseFloat((g / 1000).toFixed(2))}kg` : `${Math.round(g)}g`;
@@ -197,8 +200,14 @@ function formatWeight(g: number, unit: 'g' | 'lbs'): string {
   const lbs = Math.floor(totalOz / 16);
   const oz = totalOz % 16;
   if (lbs === 0) return `${parseFloat(oz.toFixed(1))}oz`;
-  if (oz < 0.05) return `${lbs}lb`;
+  if (oz < MIN_OZ_DISPLAY) return `${lbs}lb`;
   return `${lbs}lb ${parseFloat(oz.toFixed(1))}oz`;
+}
+
+function parseWeightGrams(value: string): number | null {
+  const v = parseFloat(value);
+  if (value.trim() === '' || isNaN(v) || v < 0) return null;
+  return v;
 }
 
 interface WeightEditProps {
@@ -234,8 +243,7 @@ function WeightEdit({ weightG, editable, onSave }: WeightEditProps) {
   }
 
   function commitG() {
-    const v = parseFloat(draftG);
-    onSave(draftG === '' || isNaN(v) || v < 0 ? null : v);
+    onSave(parseWeightGrams(draftG));
     setEditing(false);
   }
 
