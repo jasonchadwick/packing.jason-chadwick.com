@@ -14,8 +14,8 @@ type LegacyItem = {
   count?: number;
 };
 
-type LegacyCat = Omit<Category, 'isContainer' | 'packed'> &
-  Partial<Pick<Category, 'isContainer' | 'packed'>>;
+type LegacyCat = Omit<Category, 'isContainer' | 'packed' | 'bagCategoryId'> &
+  Partial<Pick<Category, 'isContainer' | 'packed' | 'bagCategoryId'>>;
 
 export type RawState = {
   // old flat format
@@ -32,9 +32,12 @@ export function migrateState(raw: RawState): AppState {
     return {
       inventories: raw.inventories.map(inv => ({
         ...inv,
-      items: (inv.items as (Omit<Item, 'count' | 'bagCategoryId'> & { count?: number; bagCategoryId?: string | null })[]).map(
-        i => ({ count: 1, bagCategoryId: null, ...i }),
-      ),
+        categories: (inv.categories as (Omit<Category, 'bagCategoryId'> & { bagCategoryId?: string | null })[]).map(
+          c => ({ bagCategoryId: null, ...c }),
+        ),
+        items: (inv.items as (Omit<Item, 'count' | 'bagCategoryId'> & { count?: number; bagCategoryId?: string | null })[]).map(
+          i => ({ count: 1, bagCategoryId: null, ...i }),
+        ),
       })),
       activeInventoryId: raw.activeInventoryId ?? raw.inventories[0].id,
       activeTab: raw.activeTab ?? 'packing',
@@ -47,6 +50,7 @@ export function migrateState(raw: RawState): AppState {
   const categories: Category[] = (raw.categories ?? []).map(c => ({
     isContainer: false,
     packed: false,
+    bagCategoryId: null,
     ...c,
   }));
 

@@ -776,10 +776,11 @@ function ItemRow({
 interface BagItemRowProps {
   item: Item;
   bags: Category[];
+  showBagSelector: boolean;
   dispatch: React.Dispatch<Action>;
 }
 
-function BagItemRow({ item, bags, dispatch }: BagItemRowProps) {
+function BagItemRow({ item, bags, showBagSelector, dispatch }: BagItemRowProps) {
   return (
     <div className={`item-row${item.checked ? ' checked' : ''}`}>
       <input
@@ -803,20 +804,22 @@ function BagItemRow({ item, bags, dispatch }: BagItemRowProps) {
           aria-label="Increase count"
         >+</button>
       </div>
-      <select
-        className="bag-selector"
-        value={item.bagCategoryId ?? ''}
-        onChange={e =>
-          dispatch({ type: 'SET_ITEM_BAG', id: item.id, bagCategoryId: e.target.value || null })
-        }
-        title="Assign to bag"
-        aria-label="Assign to bag"
-      >
-        <option value="">No bag</option>
-        {bags.map(bag => (
-          <option key={bag.id} value={bag.id}>{bag.name}</option>
-        ))}
-      </select>
+      {showBagSelector && (
+        <select
+          className="bag-selector"
+          value={item.bagCategoryId ?? ''}
+          onChange={e =>
+            dispatch({ type: 'SET_ITEM_BAG', id: item.id, bagCategoryId: e.target.value || null })
+          }
+          title="Assign to bag"
+          aria-label="Assign to bag"
+        >
+          <option value="">No bag</option>
+          {bags.map(bag => (
+            <option key={bag.id} value={bag.id}>{bag.name}</option>
+          ))}
+        </select>
+      )}
       <div className="item-actions">
         <button
           className="btn-move"
@@ -834,15 +837,41 @@ function BagItemRow({ item, bags, dispatch }: BagItemRowProps) {
 
 interface BagSectionProps {
   bag: Category;
-  items: Item[];
+  allCategories: Category[];
   allBags: Category[];
+  packingItems: Item[];
+  looseItems: Item[];
+  depth: number;
   dispatch: React.Dispatch<Action>;
 }
 
-function BagSection({ bag, items, allBags, dispatch }: BagSectionProps) {
-  const checkedCount = items.filter(i => i.checked).length;
+function BagSection({ bag, allCategories, allBags, packingItems, looseItems, depth, dispatch }: BagSectionProps) {
+  // Items directly inside this container (via inventory categoryId)
+  const containerItems = packingItems.filter(i => i.categoryId === bag.id);
+  // Sub-bags: containers whose bagCategoryId points to this bag
+  const subBags = allBags.filter(b => b.bagCategoryId === bag.id);
+  // Loose items explicitly assigned to this bag
+  const assignedLooseItems = looseItems.filter(i => i.bagCategoryId === bag.id);
+
+  const directTotal = containerItems.length + assignedLooseItems.length;
+  const directChecked = containerItems.filter(i => i.checked).length + assignedLooseItems.filter(i => i.checked).length;
+
+  // Compute valid parent bag options (exclude self and bag-view descendants)
+  const excluded = new Set<string>();
+  // Build subtree using bagCategoryId
+  const computeSubtree = (id: string) => {
+    excluded.add(id);
+    for (const c of allCategories) {
+      if (c.isContainer && c.bagCategoryId === id) computeSubtree(c.id);
+    }
+  };
+  computeSubtree(bag.id);
+  const availableParents = allBags.filter(b => !excluded.has(b.id));
+
+  const isEmpty = containerItems.length === 0 && subBags.length === 0 && assignedLooseItems.length === 0;
+
   return (
-    <div className="category-block" style={{ '--depth': 0 } as React.CSSProperties}>
+    <div className="category-block" style={{ '--depth': depth } as React.CSSProperties}>
       <div className="category-header">
         <button
           className="btn-icon collapse-btn"
@@ -859,24 +888,59 @@ function BagSection({ bag, items, allBags, dispatch }: BagSectionProps) {
           title="Mark bag as packed"
         />
         <span className={`category-name${bag.packed ? ' packed' : ''}`}>{bag.name}</span>
-        {items.length > 0 && (
-          <span className="badge">{checkedCount}/{items.length}</span>
+        {directTotal > 0 && (
+          <span className="badge">{directChecked}/{directTotal}</span>
         )}
+        <select
+          className="bag-selector"
+          value={bag.bagCategoryId ?? ''}
+          onChange={e =>
+            dispatch({ type: 'SET_CATEGORY_BAG', id: bag.id, bagCategoryId: e.target.value || null })
+          }
+          title="Assign bag to parent bag"
+          aria-label="Assign bag to parent bag"
+        >
+          <option value="">Standalone</option>
+          {availableParents.map(b => (
+            <option key={b.id} value={b.id}>{b.name}</option>
+          ))}
+        </select>
       </div>
       {!bag.collapsed && (
         <div className="category-body">
-          {items.length === 0 ? (
+          {isEmpty && (
             <span className="bag-empty-hint">No items assigned to this bag</span>
-          ) : (
-            items.map(item => (
-              <BagItemRow
-                key={item.id}
-                item={item}
-                bags={allBags}
-                dispatch={dispatch}
-              />
-            ))
           )}
+          {containerItems.map(item => (
+            <BagItemRow
+              key={item.id}
+              item={item}
+              bags={allBags}
+              showBagSelector={false}
+              dispatch={dispatch}
+            />
+          ))}
+          {subBags.map(subBag => (
+            <BagSection
+              key={subBag.id}
+              bag={subBag}
+              allCategories={allCategories}
+              allBags={allBags}
+              packingItems={packingItems}
+              looseItems={looseItems}
+              depth={depth + 1}
+              dispatch={dispatch}
+            />
+          ))}
+          {assignedLooseItems.map(item => (
+            <BagItemRow
+              key={item.id}
+              item={item}
+              bags={allBags}
+              showBagSelector={true}
+              dispatch={dispatch}
+            />
+          ))}
         </div>
       )}
     </div>
@@ -893,29 +957,34 @@ interface BagViewProps {
 }
 
 function BagView({ categories, items, activePackingListId, dispatch }: BagViewProps) {
-  const bags = categories.filter(c => c.isContainer);
+  const allBags = categories.filter(c => c.isContainer);
+  const containerCatIds = new Set(allBags.map(b => b.id));
   const packingItems = items.filter(i => i.packingListId === activePackingListId);
 
-  const itemsByBag = new Map<string | null, Item[]>();
-  itemsByBag.set(null, []);
-  for (const bag of bags) itemsByBag.set(bag.id, []);
-  for (const item of packingItems) {
-    const bagId = item.bagCategoryId !== null && bags.some(b => b.id === item.bagCategoryId)
-      ? item.bagCategoryId
-      : null;
-    itemsByBag.get(bagId)!.push(item);
-  }
+  // Loose items: not directly inside a container category
+  const looseItems = packingItems.filter(
+    i => i.categoryId === null || !containerCatIds.has(i.categoryId),
+  );
 
-  const unassigned = itemsByBag.get(null) ?? [];
+  // Top-level bags: containers with no parent bag assignment
+  const topLevelBags = allBags.filter(b => b.bagCategoryId === null);
+
+  // Unassigned: loose items not assigned to any (valid) bag
+  const unassigned = looseItems.filter(
+    i => i.bagCategoryId === null || !containerCatIds.has(i.bagCategoryId),
+  );
 
   return (
     <>
-      {bags.map(bag => (
+      {topLevelBags.map(bag => (
         <BagSection
           key={bag.id}
           bag={bag}
-          items={itemsByBag.get(bag.id) ?? []}
-          allBags={bags}
+          allCategories={categories}
+          allBags={allBags}
+          packingItems={packingItems}
+          looseItems={looseItems}
+          depth={0}
           dispatch={dispatch}
         />
       ))}
@@ -930,7 +999,8 @@ function BagView({ categories, items, activePackingListId, dispatch }: BagViewPr
               <BagItemRow
                 key={item.id}
                 item={item}
-                bags={bags}
+                bags={allBags}
+                showBagSelector={true}
                 dispatch={dispatch}
               />
             ))}
@@ -961,6 +1031,8 @@ interface ViewProps {
 
 interface PackingViewProps extends ViewProps {
   packingLists: PackingList[];
+  viewMode: 'category' | 'bag';
+  onSetViewMode: (mode: 'category' | 'bag') => void;
   onNewTrip: () => void;
   onClearChecks: () => void;
   onOpenPackingListEditor: () => void;
@@ -1013,12 +1085,13 @@ function PackingView({
   items,
   activePackingListId,
   packingLists,
+  viewMode,
+  onSetViewMode,
   dispatch,
   onNewTrip,
   onClearChecks,
   onOpenPackingListEditor,
 }: PackingViewProps) {
-  const [viewMode, setViewMode] = useState<'category' | 'bag'>('category');
   const rootCategories = categories.filter(c => c.parentId === null);
   const uncategorized = items.filter(
     i => i.packingListId === activePackingListId && i.categoryId === null,
@@ -1036,14 +1109,14 @@ function PackingView({
         <div className="view-mode-toggle" role="group" aria-label="Packing view mode">
           <button
             className={`view-mode-btn${viewMode === 'category' ? ' active' : ''}`}
-            onClick={() => setViewMode('category')}
+            onClick={() => onSetViewMode('category')}
             aria-pressed={viewMode === 'category'}
           >
             Category
           </button>
           <button
             className={`view-mode-btn${viewMode === 'bag' ? ' active' : ''}`}
-            onClick={() => setViewMode('bag')}
+            onClick={() => onSetViewMode('bag')}
             aria-pressed={viewMode === 'bag'}
           >
             Bag
@@ -1488,6 +1561,7 @@ export default function App() {
   const [inventoryEditMode, setInventoryEditMode] = useState(false);
   const [isInventoryEditorOpen, setIsInventoryEditorOpen] = useState(false);
   const [isPackingListEditorOpen, setIsPackingListEditorOpen] = useState(false);
+  const [packingViewMode, setPackingViewMode] = useState<'category' | 'bag'>('category');
 
   // ── Sync state ──────────────────────────────────────────────────────────────
 
@@ -1674,6 +1748,8 @@ export default function App() {
             items={items}
             activePackingListId={activePackingListId}
             packingLists={packingLists}
+            viewMode={packingViewMode}
+            onSetViewMode={setPackingViewMode}
             dispatch={dispatch}
             onNewTrip={handleNewTrip}
             onClearChecks={handleClearChecks}

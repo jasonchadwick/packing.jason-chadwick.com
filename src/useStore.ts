@@ -19,6 +19,16 @@ function getSubtreeIds(categories: Category[], rootId: string): string[] {
   return result;
 }
 
+function getBagSubtreeIds(categories: Category[], rootId: string): Set<string> {
+  const result = new Set<string>([rootId]);
+  for (const cat of categories) {
+    if (cat.isContainer && cat.bagCategoryId === rootId) {
+      for (const id of getBagSubtreeIds(categories, cat.id)) result.add(id);
+    }
+  }
+  return result;
+}
+
 function updateActiveInventory(
   state: AppState,
   updater: (inv: Inventory) => Inventory,
@@ -159,6 +169,16 @@ function mergeInventory(existing: Inventory, imported: Inventory): Inventory {
     mergedItems.push({ ...item, id, categoryId, packingListId, bagCategoryId });
   }
 
+  // Remap bagCategoryId on categories from the import (existing ones are already correct)
+  const mergedCatIdSet = new Set(mergedCategories.map(c => c.id));
+  const finalCategories = mergedCategories.map(cat => {
+    if (cat.bagCategoryId === null) return cat;
+    const remapped = categoryIdMap.get(cat.bagCategoryId);
+    if (remapped !== undefined) return { ...cat, bagCategoryId: remapped };
+    if (mergedCatIdSet.has(cat.bagCategoryId)) return cat;
+    return { ...cat, bagCategoryId: null };
+  });
+
   const activePackingListId = mergedPackingLists.some(l => l.id === existing.activePackingListId)
     ? existing.activePackingListId
     : mergedPackingLists[0]?.id ?? null;
@@ -166,7 +186,7 @@ function mergeInventory(existing: Inventory, imported: Inventory): Inventory {
   return {
     ...existing,
     packingLists: mergedPackingLists,
-    categories: mergedCategories,
+    categories: finalCategories,
     items: mergedItems,
     activePackingListId,
   };
@@ -258,6 +278,7 @@ function reducer(state: AppState, action: Action): AppState {
         collapsed: false,
         isContainer: action.isContainer ?? false,
         packed: false,
+        bagCategoryId: null,
       };
       return updateActiveInventory(state, inv => ({
         ...inv,
@@ -269,7 +290,12 @@ function reducer(state: AppState, action: Action): AppState {
         const toDelete = getSubtreeIds(inv.categories, action.id);
         return {
           ...inv,
-          categories: inv.categories.filter(c => !toDelete.includes(c.id)),
+          categories: inv.categories
+            .filter(c => !toDelete.includes(c.id))
+            .map(c => ({
+              ...c,
+              bagCategoryId: c.bagCategoryId !== null && toDelete.includes(c.bagCategoryId) ? null : c.bagCategoryId,
+            })),
           items: inv.items.map(i => ({
             ...i,
             categoryId: i.categoryId !== null && toDelete.includes(i.categoryId) ? null : i.categoryId,
@@ -331,13 +357,23 @@ function reducer(state: AppState, action: Action): AppState {
         };
       });
     }
-    case 'TOGGLE_CONTAINER':
+    case 'TOGGLE_CONTAINER': {
+      const toggledCat = getActiveInventory(state)?.categories.find(c => c.id === action.id);
+      const wasContainer = toggledCat?.isContainer ?? false;
       return updateActiveInventory(state, inv => ({
         ...inv,
-        categories: inv.categories.map(c =>
-          c.id === action.id ? { ...c, isContainer: !c.isContainer, packed: false } : c,
-        ),
+        categories: inv.categories.map(c => {
+          if (c.id === action.id) return { ...c, isContainer: !c.isContainer, packed: false, bagCategoryId: null };
+          // If toggling off, clear any categories that had this as their bag parent
+          if (wasContainer && c.bagCategoryId === action.id) return { ...c, bagCategoryId: null };
+          return c;
+        }),
+        // If toggling off, clear item.bagCategoryId references to this container
+        items: wasContainer
+          ? inv.items.map(i => i.bagCategoryId === action.id ? { ...i, bagCategoryId: null } : i)
+          : inv.items,
       }));
+    }
     case 'TOGGLE_CONTAINER_PACKED': {
       const activeInv = getActiveInventory(state);
       if (!activeInv) return state;
@@ -382,7 +418,7 @@ function reducer(state: AppState, action: Action): AppState {
           c.id === action.id ? { ...c, packed: newPacked } : c,
         ),
         items: inv.items.map(i =>
-          i.bagCategoryId === action.id && i.packingListId === listId
+          (i.categoryId === action.id || i.bagCategoryId === action.id) && i.packingListId === listId
             ? { ...i, checked: newPacked }
             : i,
         ),
@@ -395,6 +431,24 @@ function reducer(state: AppState, action: Action): AppState {
           i.id === action.id ? { ...i, bagCategoryId: action.bagCategoryId } : i,
         ),
       }));
+    case 'SET_CATEGORY_BAG': {
+      return updateActiveInventory(state, inv => {
+        const cat = inv.categories.find(c => c.id === action.id);
+        if (!cat || !cat.isContainer) return inv;
+        if (action.bagCategoryId !== null) {
+          const target = inv.categories.find(c => c.id === action.bagCategoryId);
+          if (!target || !target.isContainer) return inv;
+          // Prevent cycles: target must not be inside this container's bag subtree
+          if (getBagSubtreeIds(inv.categories, action.id).has(action.bagCategoryId)) return inv;
+        }
+        return {
+          ...inv,
+          categories: inv.categories.map(c =>
+            c.id === action.id ? { ...c, bagCategoryId: action.bagCategoryId } : c,
+          ),
+        };
+      });
+    }
     case 'CLEAR_CHECKS': {
       const activeInv = getActiveInventory(state);
       if (!activeInv) return state;

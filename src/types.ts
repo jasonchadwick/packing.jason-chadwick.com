@@ -19,6 +19,8 @@ export interface Category {
   collapsed: boolean;
   isContainer: boolean;
   packed: boolean;
+  /** null = standalone top-level bag; non-null = id of parent container in bag view */
+  bagCategoryId: string | null;
 }
 
 export interface PackingList {
@@ -58,6 +60,7 @@ export type Action =
   | { type: 'TOGGLE_CONTAINER_PACKED'; id: string }
   | { type: 'TOGGLE_BAG_PACKED'; id: string }
   | { type: 'SET_ITEM_BAG'; id: string; bagCategoryId: string | null }
+  | { type: 'SET_CATEGORY_BAG'; id: string; bagCategoryId: string | null }
   | { type: 'CLEAR_CHECKS' }
   | { type: 'SET_ITEM_COUNT'; id: string; count: number }
   | { type: 'SET_TAB'; tab: Location }
