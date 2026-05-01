@@ -93,7 +93,10 @@ function mergeInventory(existing: Inventory, imported: Inventory): Inventory {
   );
   const categoryKeyToId = new Map<string, string>();
   for (const cat of mergedCategories) {
-    const key = `${cat.parentId ?? 'root'}::${normalizeName(cat.name)}`;
+    // Include packingListId in key so pure bags don't collide with inventory categories
+    // or with pure bags belonging to different packing lists.
+    const plSuffix = cat.packingListId ? `::pl:${cat.packingListId}` : '';
+    const key = `${cat.parentId ?? 'root'}::${normalizeName(cat.name)}${plSuffix}`;
     if (!categoryKeyToId.has(key)) categoryKeyToId.set(key, cat.id);
   }
 
@@ -105,7 +108,9 @@ function mergeInventory(existing: Inventory, imported: Inventory): Inventory {
       const mappedParentId = cat.parentId === null ? null : categoryIdMap.get(cat.parentId);
       if (cat.parentId !== null && mappedParentId === undefined) continue;
 
-      const key = `${mappedParentId ?? 'root'}::${normalizeName(cat.name)}`;
+      const mappedPlId = cat.packingListId === null ? null : (packingListIdMap.get(cat.packingListId) ?? null);
+      const plSuffix = mappedPlId ? `::pl:${mappedPlId}` : '';
+      const key = `${mappedParentId ?? 'root'}::${normalizeName(cat.name)}${plSuffix}`;
       const existingCatId = categoryKeyToId.get(key);
       if (existingCatId) {
         categoryIdMap.set(cat.id, existingCatId);
@@ -120,7 +125,12 @@ function mergeInventory(existing: Inventory, imported: Inventory): Inventory {
         }
       } else {
         const id = getUniqueId(cat.id, categoryIds);
-        const newCat: Category = { ...cat, id, parentId: mappedParentId ?? null };
+        const newCat: Category = {
+          ...cat,
+          id,
+          parentId: mappedParentId ?? null,
+          packingListId: mappedPlId,
+        };
         categoryIdMap.set(cat.id, id);
         mergedCategories.push(newCat);
         categoryIndexById.set(id, mergedCategories.length - 1);
@@ -133,13 +143,20 @@ function mergeInventory(existing: Inventory, imported: Inventory): Inventory {
     if (!progressed) {
       for (const cat of imported.categories) {
         if (!pending.has(cat.id)) continue;
-        const key = `root::${normalizeName(cat.name)}`;
+        const mappedFallbackPlId = cat.packingListId === null ? null : (packingListIdMap.get(cat.packingListId) ?? null);
+        const fallbackPlSuffix = mappedFallbackPlId ? `::pl:${mappedFallbackPlId}` : '';
+        const key = `root::${normalizeName(cat.name)}${fallbackPlSuffix}`;
         const existingCatId = categoryKeyToId.get(key);
         if (existingCatId) {
           categoryIdMap.set(cat.id, existingCatId);
         } else {
           const id = getUniqueId(cat.id, categoryIds);
-          const newCat: Category = { ...cat, id, parentId: null };
+          const newCat: Category = {
+            ...cat,
+            id,
+            parentId: null,
+            packingListId: mappedFallbackPlId,
+          };
           categoryIdMap.set(cat.id, id);
           mergedCategories.push(newCat);
           categoryIndexById.set(id, mergedCategories.length - 1);
@@ -279,6 +296,7 @@ function reducer(state: AppState, action: Action): AppState {
         isContainer: action.isContainer ?? false,
         packed: false,
         bagCategoryId: null,
+        packingListId: action.packingListId ?? null,
       };
       return updateActiveInventory(state, inv => ({
         ...inv,
@@ -535,13 +553,29 @@ function reducer(state: AppState, action: Action): AppState {
         const newLists = inv.packingLists.filter(l => l.id !== action.id);
         const newActiveId =
           action.id === inv.activePackingListId ? newLists[0].id : inv.activePackingListId;
+        // Collect pure bag ids that belong to the deleted packing list
+        const deletedBagIds = new Set(
+          inv.categories.filter(c => c.packingListId === action.id).map(c => c.id),
+        );
         return {
           ...inv,
           packingLists: newLists,
           activePackingListId: newActiveId,
-          items: inv.items.map(i =>
-            i.packingListId === action.id ? { ...i, packingListId: null, checked: false } : i,
-          ),
+          categories: inv.categories
+            .filter(c => !deletedBagIds.has(c.id))
+            .map(c => ({
+              ...c,
+              bagCategoryId: deletedBagIds.has(c.bagCategoryId ?? '') ? null : c.bagCategoryId,
+            })),
+          items: inv.items.map(i => {
+            if (i.packingListId === action.id) {
+              return { ...i, packingListId: null, checked: false, bagCategoryId: null };
+            }
+            if (i.bagCategoryId !== null && deletedBagIds.has(i.bagCategoryId)) {
+              return { ...i, bagCategoryId: null };
+            }
+            return i;
+          }),
         };
       });
     }

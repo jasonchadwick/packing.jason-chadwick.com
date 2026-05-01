@@ -21,6 +21,8 @@ export interface Category {
   packed: boolean;
   /** null = standalone top-level bag; non-null = id of parent container in bag view */
   bagCategoryId: string | null;
+  /** null = regular inventory category; non-null = packing-list id this bag belongs to (pure bag, hidden from inventory) */
+  packingListId: string | null;
 }
 
 export interface PackingList {
@@ -49,7 +51,7 @@ export type Action =
   | { type: 'TOGGLE_CHECK'; id: string }
   | { type: 'MOVE_ITEM'; id: string; packingListId: string | null }
   | { type: 'RENAME_ITEM'; id: string; name: string }
-  | { type: 'ADD_CATEGORY'; name: string; parentId: string | null; isContainer?: boolean }
+  | { type: 'ADD_CATEGORY'; name: string; parentId: string | null; isContainer?: boolean; packingListId?: string | null }
   | { type: 'DELETE_CATEGORY'; id: string }
   | { type: 'TOGGLE_COLLAPSE'; id: string }
   | { type: 'RENAME_CATEGORY'; id: string; name: string }

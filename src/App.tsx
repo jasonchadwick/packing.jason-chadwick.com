@@ -855,10 +855,15 @@ interface BagSectionProps {
   packingItems: Item[];
   looseItems: Item[];
   depth: number;
+  inventoryEditMode: boolean;
   dispatch: React.Dispatch<Action>;
 }
 
-function BagSection({ bag, allCategories, allBags, packingItems, looseItems, depth, dispatch }: BagSectionProps) {
+function BagSection({ bag, allCategories, allBags, packingItems, looseItems, depth, inventoryEditMode, dispatch }: BagSectionProps) {
+  const dragCtx = useContext(DragContext)!;
+  const blockRef = useRef<HTMLDivElement>(null);
+  const isDragHandleActive = useRef(false);
+
   // Items directly inside this container (via inventory categoryId)
   const containerItems = packingItems.filter(i => i.categoryId === bag.id);
   // Sub-bags: containers whose bagCategoryId points to this bag
@@ -876,9 +881,24 @@ function BagSection({ bag, allCategories, allBags, packingItems, looseItems, dep
 
   const isEmpty = containerItems.length === 0 && subBags.length === 0 && assignedLooseItems.length === 0;
 
+  // Pure bags (packingListId !== null) can be edited/deleted; inventory containers cannot be deleted from bag view
+  const isPureBag = bag.packingListId !== null;
+  const isDragging = dragCtx.dragging?.id === bag.id && dragCtx.dragging.type === 'category';
+  const dropPos = dragCtx.dropTarget?.id === bag.id ? dragCtx.dropTarget.position : null;
+
   return (
-    <div className="category-block" style={{ '--depth': depth } as React.CSSProperties}>
-      <div className="category-header">
+    <div
+      ref={blockRef}
+      data-drag-id={bag.id}
+      data-drag-type="category"
+      className={`category-block${isDragging ? ' is-dragging' : ''}${dropPos ? ` drop-${dropPos}` : ''}`}
+      style={{ '--depth': depth } as React.CSSProperties}
+    >
+      <div
+        className="category-header"
+        onDragOver={e => dragCtx.onDragOver(e, bag.id, 'category')}
+        onDrop={e => dragCtx.onDrop(e, bag.id, 'category')}
+      >
         <button
           className="btn-icon collapse-btn"
           onClick={() => dispatch({ type: 'TOGGLE_COLLAPSE', id: bag.id })}
@@ -893,7 +913,12 @@ function BagSection({ bag, allCategories, allBags, packingItems, looseItems, dep
           onChange={() => dispatch({ type: 'TOGGLE_BAG_PACKED', id: bag.id })}
           title="Mark bag as packed"
         />
-        <span className={`category-name${bag.packed ? ' packed' : ''}`}>{bag.name}</span>
+        <InlineEdit
+          value={bag.name}
+          onSave={name => dispatch({ type: 'RENAME_CATEGORY', id: bag.id, name })}
+          editable={inventoryEditMode && isPureBag}
+          className={`category-name${bag.packed ? ' packed' : ''}`}
+        />
         {directTotal > 0 && (
           <span className="badge">{directChecked}/{directTotal}</span>
         )}
@@ -911,6 +936,65 @@ function BagSection({ bag, allCategories, allBags, packingItems, looseItems, dep
             <option key={b.id} value={b.id}>{b.name}</option>
           ))}
         </select>
+        {inventoryEditMode && isPureBag && (
+          <button
+            className="btn-icon danger"
+            onClick={() => {
+              if (confirm(`Delete bag "${bag.name}"?`)) {
+                dispatch({ type: 'DELETE_CATEGORY', id: bag.id });
+              }
+            }}
+            aria-label="Delete bag"
+          >
+            ✕
+          </button>
+        )}
+        {inventoryEditMode && isPureBag && (
+          <span
+            className="drag-handle"
+            draggable
+            onPointerDown={e => {
+              if (e.pointerType === 'touch') {
+                e.preventDefault();
+                (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                dragCtx.startDrag(bag.id, 'category');
+                return;
+              }
+              isDragHandleActive.current = true;
+            }}
+            onPointerMove={e => {
+              if (e.pointerType !== 'touch') return;
+              e.preventDefault();
+              dragCtx.updatePointerTarget(e.clientX, e.clientY);
+            }}
+            onPointerUp={e => {
+              if (e.pointerType !== 'touch') return;
+              if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
+                (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+              }
+              dragCtx.commitPointerDrop(e.clientX, e.clientY);
+            }}
+            onPointerCancel={e => {
+              if (e.pointerType !== 'touch') return;
+              if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
+                (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+              }
+              dragCtx.endDrag();
+            }}
+            onDragStart={e => {
+              if (!isDragHandleActive.current) { e.preventDefault(); return; }
+              isDragHandleActive.current = false;
+              e.stopPropagation();
+              if (blockRef.current) e.dataTransfer.setDragImage(blockRef.current, 0, 0);
+              e.dataTransfer.effectAllowed = 'move';
+              dragCtx.startDrag(bag.id, 'category');
+            }}
+            onDragEnd={() => { isDragHandleActive.current = false; dragCtx.endDrag(); }}
+            title="Drag to reorder"
+          >
+            ⠿
+          </span>
+        )}
       </div>
       {!bag.collapsed && (
         <div className="category-body">
@@ -935,6 +1019,7 @@ function BagSection({ bag, allCategories, allBags, packingItems, looseItems, dep
               packingItems={packingItems}
               looseItems={looseItems}
               depth={depth + 1}
+              inventoryEditMode={inventoryEditMode}
               dispatch={dispatch}
             />
           ))}
@@ -959,11 +1044,16 @@ interface BagViewProps {
   categories: Category[];
   items: Item[];
   activePackingListId: string | null;
+  inventoryEditMode: boolean;
   dispatch: React.Dispatch<Action>;
 }
 
-function BagView({ categories, items, activePackingListId, dispatch }: BagViewProps) {
-  const allBags = categories.filter(c => c.isContainer);
+function BagView({ categories, items, activePackingListId, inventoryEditMode, dispatch }: BagViewProps) {
+  // Inventory containers (packingListId: null) are shared across all packing lists;
+  // pure bags (packingListId: non-null) only appear for their specific packing list.
+  const allBags = categories.filter(c =>
+    c.isContainer && (c.packingListId === null || c.packingListId === activePackingListId),
+  );
   const containerCatIds = new Set(allBags.map(b => b.id));
   const packingItems = items.filter(i => i.packingListId === activePackingListId);
 
@@ -991,6 +1081,7 @@ function BagView({ categories, items, activePackingListId, dispatch }: BagViewPr
           packingItems={packingItems}
           looseItems={looseItems}
           depth={0}
+          inventoryEditMode={inventoryEditMode}
           dispatch={dispatch}
         />
       ))}
@@ -1017,7 +1108,7 @@ function BagView({ categories, items, activePackingListId, dispatch }: BagViewPr
       <AddForm
         placeholder="Add bag…"
         onAdd={name =>
-          dispatch({ type: 'ADD_CATEGORY', name, parentId: null, isContainer: true })
+          dispatch({ type: 'ADD_CATEGORY', name, parentId: null, isContainer: true, packingListId: activePackingListId })
         }
         className="bag-add-form"
       />
@@ -1039,6 +1130,7 @@ interface PackingViewProps extends ViewProps {
   packingLists: PackingList[];
   viewMode: 'category' | 'bag';
   onSetViewMode: (mode: 'category' | 'bag') => void;
+  inventoryEditMode: boolean;
   onNewTrip: () => void;
   onClearChecks: () => void;
   onOpenPackingListEditor: () => void;
@@ -1093,12 +1185,14 @@ function PackingView({
   packingLists,
   viewMode,
   onSetViewMode,
+  inventoryEditMode,
   dispatch,
   onNewTrip,
   onClearChecks,
   onOpenPackingListEditor,
 }: PackingViewProps) {
-  const rootCategories = categories.filter(c => c.parentId === null);
+  // Exclude pure bags from category view (they live in bag view only)
+  const rootCategories = categories.filter(c => c.parentId === null && c.packingListId === null);
   const uncategorized = items.filter(
     i => i.packingListId === activePackingListId && i.categoryId === null,
   );
@@ -1176,6 +1270,7 @@ function PackingView({
             categories={categories}
             items={items}
             activePackingListId={activePackingListId}
+            inventoryEditMode={inventoryEditMode}
             dispatch={dispatch}
           />
         )}
@@ -1193,19 +1288,21 @@ function InventoryView({
   inventoryEditMode = false,
   dispatch,
 }: ViewProps) {
-  const rootCategories = categories.filter(c => c.parentId === null);
+  // Exclude pure bags (packingListId !== null) — they only belong in bag view
+  const inventoryCategories = categories.filter(c => c.packingListId === null);
+  const rootCategories = inventoryCategories.filter(c => c.parentId === null);
   const uncategorized = items.filter(
     i => i.categoryId === null,
   );
 
   return (
-    <DragProvider categories={categories} items={items} dispatch={dispatch}>
+    <DragProvider categories={inventoryCategories} items={items} dispatch={dispatch}>
       <div className="view">
         {rootCategories.map(cat => (
           <CategoryTree
             key={cat.id}
             category={cat}
-            allCategories={categories}
+            allCategories={inventoryCategories}
             items={items}
             depth={0}
             viewLocation="inventory"
@@ -1756,6 +1853,7 @@ export default function App() {
             packingLists={packingLists}
             viewMode={packingViewMode}
             onSetViewMode={setPackingViewMode}
+            inventoryEditMode={inventoryEditMode}
             dispatch={dispatch}
             onNewTrip={handleNewTrip}
             onClearChecks={handleClearChecks}
