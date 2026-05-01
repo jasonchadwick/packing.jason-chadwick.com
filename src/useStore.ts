@@ -155,7 +155,8 @@ function mergeInventory(existing: Inventory, imported: Inventory): Inventory {
 
     const id = getUniqueId(item.id, itemIds);
     existingItemKeys.add(key);
-    mergedItems.push({ ...item, id, categoryId, packingListId });
+    const bagCategoryId = item.bagCategoryId === null ? null : (categoryIdMap.get(item.bagCategoryId) ?? null);
+    mergedItems.push({ ...item, id, categoryId, packingListId, bagCategoryId });
   }
 
   const activePackingListId = mergedPackingLists.some(l => l.id === existing.activePackingListId)
@@ -213,6 +214,7 @@ function reducer(state: AppState, action: Action): AppState {
         checked: false,
         count: 1,
         categoryId: action.categoryId,
+        bagCategoryId: null,
         packingListId: action.packingListId,
       };
       return updateActiveInventory(state, inv => ({
@@ -236,7 +238,9 @@ function reducer(state: AppState, action: Action): AppState {
       return updateActiveInventory(state, inv => ({
         ...inv,
         items: inv.items.map(i =>
-          i.id === action.id ? { ...i, packingListId: action.packingListId, checked: false } : i,
+          i.id === action.id
+            ? { ...i, packingListId: action.packingListId, checked: false, bagCategoryId: action.packingListId === null ? null : i.bagCategoryId }
+            : i,
         ),
       }));
     case 'RENAME_ITEM':
@@ -252,7 +256,7 @@ function reducer(state: AppState, action: Action): AppState {
         name: action.name.trim(),
         parentId: action.parentId,
         collapsed: false,
-        isContainer: false,
+        isContainer: action.isContainer ?? false,
         packed: false,
       };
       return updateActiveInventory(state, inv => ({
@@ -266,11 +270,11 @@ function reducer(state: AppState, action: Action): AppState {
         return {
           ...inv,
           categories: inv.categories.filter(c => !toDelete.includes(c.id)),
-          items: inv.items.map(i =>
-            i.categoryId !== null && toDelete.includes(i.categoryId)
-              ? { ...i, categoryId: null }
-              : i,
-          ),
+          items: inv.items.map(i => ({
+            ...i,
+            categoryId: i.categoryId !== null && toDelete.includes(i.categoryId) ? null : i.categoryId,
+            bagCategoryId: i.bagCategoryId !== null && toDelete.includes(i.bagCategoryId) ? null : i.bagCategoryId,
+          })),
         };
       });
     }
@@ -365,6 +369,32 @@ function reducer(state: AppState, action: Action): AppState {
             : i,
         ),
       }));
+    case 'TOGGLE_BAG_PACKED': {
+      const activeInv = getActiveInventory(state);
+      if (!activeInv) return state;
+      const listId = activeInv.activePackingListId;
+      const cat = activeInv.categories.find(c => c.id === action.id);
+      if (!cat) return state;
+      const newPacked = !cat.packed;
+      return updateActiveInventory(state, inv => ({
+        ...inv,
+        categories: inv.categories.map(c =>
+          c.id === action.id ? { ...c, packed: newPacked } : c,
+        ),
+        items: inv.items.map(i =>
+          i.bagCategoryId === action.id && i.packingListId === listId
+            ? { ...i, checked: newPacked }
+            : i,
+        ),
+      }));
+    }
+    case 'SET_ITEM_BAG':
+      return updateActiveInventory(state, inv => ({
+        ...inv,
+        items: inv.items.map(i =>
+          i.id === action.id ? { ...i, bagCategoryId: action.bagCategoryId } : i,
+        ),
+      }));
     case 'CLEAR_CHECKS': {
       const activeInv = getActiveInventory(state);
       if (!activeInv) return state;
@@ -386,7 +416,7 @@ function reducer(state: AppState, action: Action): AppState {
       return updateActiveInventory(state, inv => ({
         ...inv,
         items: inv.items.map(i =>
-          i.packingListId === listId ? { ...i, packingListId: null, checked: false } : i,
+          i.packingListId === listId ? { ...i, packingListId: null, checked: false, bagCategoryId: null } : i,
         ),
         categories: inv.categories.map(c => ({ ...c, packed: false })),
       }));

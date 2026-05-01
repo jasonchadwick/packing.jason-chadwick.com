@@ -8,6 +8,8 @@ export interface Item {
   categoryId: string | null;
   /** null = in inventory; non-null = id of the packing list this item belongs to */
   packingListId: string | null;
+  /** null = not assigned to a bag; non-null = id of the container category used as a bag */
+  bagCategoryId: string | null;
 }
 
 export interface Category {
@@ -45,7 +47,7 @@ export type Action =
   | { type: 'TOGGLE_CHECK'; id: string }
   | { type: 'MOVE_ITEM'; id: string; packingListId: string | null }
   | { type: 'RENAME_ITEM'; id: string; name: string }
-  | { type: 'ADD_CATEGORY'; name: string; parentId: string | null }
+  | { type: 'ADD_CATEGORY'; name: string; parentId: string | null; isContainer?: boolean }
   | { type: 'DELETE_CATEGORY'; id: string }
   | { type: 'TOGGLE_COLLAPSE'; id: string }
   | { type: 'RENAME_CATEGORY'; id: string; name: string }
@@ -54,6 +56,8 @@ export type Action =
   | { type: 'MOVE_CATEGORY'; id: string; packingListId: string | null }
   | { type: 'TOGGLE_CONTAINER'; id: string }
   | { type: 'TOGGLE_CONTAINER_PACKED'; id: string }
+  | { type: 'TOGGLE_BAG_PACKED'; id: string }
+  | { type: 'SET_ITEM_BAG'; id: string; bagCategoryId: string | null }
   | { type: 'CLEAR_CHECKS' }
   | { type: 'SET_ITEM_COUNT'; id: string; count: number }
   | { type: 'SET_TAB'; tab: Location }

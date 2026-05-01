@@ -32,8 +32,8 @@ export function migrateState(raw: RawState): AppState {
     return {
       inventories: raw.inventories.map(inv => ({
         ...inv,
-      items: (inv.items as (Omit<Item, 'count'> & { count?: number })[]).map(
-        i => ({ count: 1, ...i }),
+      items: (inv.items as (Omit<Item, 'count' | 'bagCategoryId'> & { count?: number; bagCategoryId?: string | null })[]).map(
+        i => ({ count: 1, bagCategoryId: null, ...i }),
       ),
       })),
       activeInventoryId: raw.activeInventoryId ?? raw.inventories[0].id,
@@ -56,6 +56,7 @@ export function migrateState(raw: RawState): AppState {
     checked: i.checked,
     count: i.count ?? 1,
     categoryId: i.categoryId,
+    bagCategoryId: null,
     packingListId:
       i.packingListId !== undefined
         ? i.packingListId
