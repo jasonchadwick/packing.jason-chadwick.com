@@ -826,10 +826,11 @@ function ItemRow({
             onClick={() => {
               if (item.packingListId === activePackingListId && activePackingListId !== null) {
                 dispatch({ type: 'MOVE_ITEM', id: item.id, packingListId: null });
-              } else {
+              } else if (activePackingListId !== null) {
                 dispatch({ type: 'MOVE_ITEM', id: item.id, packingListId: activePackingListId });
               }
             }}
+            disabled={activePackingListId === null && item.packingListId === null}
             title={item.packingListId === activePackingListId && activePackingListId !== null ? 'Remove from packing list' : 'Add to packing list'}
           >
             {item.packingListId === activePackingListId && activePackingListId !== null ? 'Pack ✓' : 'Pack →'}
