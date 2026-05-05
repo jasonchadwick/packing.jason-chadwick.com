@@ -750,7 +750,7 @@ function ItemRow({
         ref={rowRef}
         data-drag-id={item.id}
         data-drag-type="item"
-        className={`item-row${item.checked ? ' checked' : ''}${isDragging ? ' is-dragging' : ''}${dropPos ? ` drop-${dropPos}` : ''}${viewLocation === 'inventory' && item.packingListId !== null ? ' in-packing' : ''}`}
+        className={`item-row${item.checked ? ' checked' : ''}${isDragging ? ' is-dragging' : ''}${dropPos ? ` drop-${dropPos}` : ''}${viewLocation === 'inventory' && item.packingListId === activePackingListId && activePackingListId !== null ? ' in-packing' : ''}`}
         onDragOver={e => dragCtx.onDragOver(e, item.id, 'item')}
         onDrop={e => dragCtx.onDrop(e, item.id, 'item')}
         onPointerDown={e => {
@@ -822,17 +822,18 @@ function ItemRow({
         )}
         {viewLocation === 'inventory' && (
           <button
-            className={`btn-move pack${item.packingListId !== null ? ' packed-out' : ''}`}
+            className={`btn-move pack${item.packingListId === activePackingListId && activePackingListId !== null ? ' packed-out' : ''}`}
             onClick={() => {
-              if (item.packingListId !== null) {
+              if (item.packingListId === activePackingListId && activePackingListId !== null) {
                 dispatch({ type: 'MOVE_ITEM', id: item.id, packingListId: null });
-              } else {
+              } else if (activePackingListId !== null) {
                 dispatch({ type: 'MOVE_ITEM', id: item.id, packingListId: activePackingListId });
               }
             }}
-            title={item.packingListId !== null ? 'Remove from packing list' : 'Add to packing list'}
+            disabled={activePackingListId === null && item.packingListId === null}
+            title={item.packingListId === activePackingListId && activePackingListId !== null ? 'Remove from packing list' : 'Add to packing list'}
           >
-            {item.packingListId !== null ? 'Pack ✓' : 'Pack →'}
+            {item.packingListId === activePackingListId && activePackingListId !== null ? 'Pack ✓' : 'Pack →'}
           </button>
         )}
         <InlineEdit
@@ -1410,13 +1411,20 @@ function PackingView({
 
 // ── InventoryView ─────────────────────────────────────────────────────────────
 
+interface InventoryViewProps extends ViewProps {
+  packingLists: PackingList[];
+  onOpenPackingListEditor: () => void;
+}
+
 function InventoryView({
   categories,
   items,
   activePackingListId,
+  packingLists,
+  onOpenPackingListEditor,
   inventoryEditMode = false,
   dispatch,
-}: ViewProps) {
+}: InventoryViewProps) {
   // Exclude pure bags (packingListId !== null) — they only belong in bag view
   const inventoryCategories = categories.filter(c => c.packingListId === null);
   const rootCategories = inventoryCategories.filter(c => c.parentId === null);
@@ -1427,6 +1435,12 @@ function InventoryView({
   return (
     <DragProvider categories={inventoryCategories} items={items} dispatch={dispatch}>
       <div className="view">
+        <PackingListBar
+          packingLists={packingLists}
+          activePackingListId={activePackingListId}
+          onOpenPackingListEditor={onOpenPackingListEditor}
+          dispatch={dispatch}
+        />
         {rootCategories.map(cat => (
           <CategoryTree
             key={cat.id}
@@ -2044,6 +2058,8 @@ export default function App() {
             categories={categories}
             items={items}
             activePackingListId={activePackingListId}
+            packingLists={packingLists}
+            onOpenPackingListEditor={() => setIsPackingListEditorOpen(true)}
             inventoryEditMode={inventoryEditMode}
             dispatch={dispatch}
           />
