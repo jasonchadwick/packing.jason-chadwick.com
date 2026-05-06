@@ -723,10 +723,6 @@ function ItemRow({
   const swipeTracking = useRef(false);
   const swipeEngaged = useRef(false);
   const swipeOffsetRef = useRef(0);
-  const moveUpRef = useRef<HTMLButtonElement>(null);
-  const moveDownRef = useRef<HTMLButtonElement>(null);
-  const pendingReorderFocus = useRef<'up' | 'down' | null>(null);
-  const [focusRequest, setFocusRequest] = useState(0);
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [swipeDragging, setSwipeDragging] = useState(false);
   const SWIPE_DELETE_THRESHOLD_PX = 80;
@@ -747,20 +743,10 @@ function ItemRow({
   const isDragging = dragCtx.dragging?.id === item.id && dragCtx.dragging.type === 'item';
   const dropPos = dragCtx.dropTarget?.id === item.id ? dragCtx.dropTarget.position : null;
   const canEditInventory = viewLocation === 'inventory' && inventoryEditMode;
-  const itemIndex = useMemo(() => siblingItems.findIndex(i => i.id === item.id), [siblingItems, item.id]);
+  const itemIndex = siblingItems.findIndex(i => i.id === item.id);
   const hasItemIndex = itemIndex !== -1;
   const prevItem = hasItemIndex && itemIndex > 0 ? siblingItems[itemIndex - 1] : null;
   const nextItem = hasItemIndex && itemIndex < siblingItems.length - 1 ? siblingItems[itemIndex + 1] : null;
-
-  useEffect(() => {
-    if (!pendingReorderFocus.current) return;
-    if (pendingReorderFocus.current === 'up') {
-      moveUpRef.current?.focus();
-    } else {
-      moveDownRef.current?.focus();
-    }
-    pendingReorderFocus.current = null;
-  }, [focusRequest]);
 
   return (
     <div className={`item-row-shell${swipeOffset < 0 ? ' swipe-active' : ''}`}>
@@ -906,14 +892,13 @@ function ItemRow({
         {canEditInventory && (
           <div className="mobile-reorder-controls" aria-label={`Reorder ${item.name}`}>
             <button
-              ref={moveUpRef}
               type="button"
               className="btn-icon"
-              onClick={() => {
+              onClick={e => {
                 if (!prevItem) return;
-                pendingReorderFocus.current = 'up';
-                setFocusRequest(v => v + 1);
                 dispatch({ type: 'REORDER_ITEM', id: item.id, targetId: prevItem.id, position: 'before' });
+                const button = e.currentTarget;
+                requestAnimationFrame(() => button.focus());
               }}
               disabled={!prevItem}
               aria-label={`Move ${item.name} up`}
@@ -922,14 +907,13 @@ function ItemRow({
               ↑
             </button>
             <button
-              ref={moveDownRef}
               type="button"
               className="btn-icon"
-              onClick={() => {
+              onClick={e => {
                 if (!nextItem) return;
-                pendingReorderFocus.current = 'down';
-                setFocusRequest(v => v + 1);
                 dispatch({ type: 'REORDER_ITEM', id: item.id, targetId: nextItem.id, position: 'after' });
+                const button = e.currentTarget;
+                requestAnimationFrame(() => button.focus());
               }}
               disabled={!nextItem}
               aria-label={`Move ${item.name} down`}
