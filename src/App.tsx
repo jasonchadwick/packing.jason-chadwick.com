@@ -755,7 +755,7 @@ function ItemRow({
     if (pendingReorderFocus.current === 'up') moveUpRef.current?.focus();
     if (pendingReorderFocus.current === 'down') moveDownRef.current?.focus();
     pendingReorderFocus.current = null;
-  });
+  }, [itemIndex]);
 
   return (
     <div className={`item-row-shell${swipeOffset < 0 ? ' swipe-active' : ''}`}>
