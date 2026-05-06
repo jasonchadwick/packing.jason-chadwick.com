@@ -726,6 +726,7 @@ function ItemRow({
   const moveUpRef = useRef<HTMLButtonElement>(null);
   const moveDownRef = useRef<HTMLButtonElement>(null);
   const pendingReorderFocus = useRef<'up' | 'down' | null>(null);
+  const [focusRequest, setFocusRequest] = useState(0);
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [swipeDragging, setSwipeDragging] = useState(false);
   const SWIPE_DELETE_THRESHOLD_PX = 80;
@@ -746,7 +747,7 @@ function ItemRow({
   const isDragging = dragCtx.dragging?.id === item.id && dragCtx.dragging.type === 'item';
   const dropPos = dragCtx.dropTarget?.id === item.id ? dragCtx.dropTarget.position : null;
   const canEditInventory = viewLocation === 'inventory' && inventoryEditMode;
-  const itemIndex = siblingItems.findIndex(i => i.id === item.id);
+  const itemIndex = useMemo(() => siblingItems.findIndex(i => i.id === item.id), [siblingItems, item.id]);
   const prevItem = itemIndex !== -1 && itemIndex > 0 ? siblingItems[itemIndex - 1] : null;
   const nextItem = itemIndex !== -1 && itemIndex < siblingItems.length - 1 ? siblingItems[itemIndex + 1] : null;
 
@@ -758,7 +759,7 @@ function ItemRow({
       moveDownRef.current?.focus();
     }
     pendingReorderFocus.current = null;
-  }, [itemIndex]);
+  }, [focusRequest]);
 
   return (
     <div className={`item-row-shell${swipeOffset < 0 ? ' swipe-active' : ''}`}>
@@ -910,6 +911,7 @@ function ItemRow({
               onClick={() => {
                 if (!prevItem) return;
                 pendingReorderFocus.current = 'up';
+                setFocusRequest(v => v + 1);
                 dispatch({ type: 'REORDER_ITEM', id: item.id, targetId: prevItem.id, position: 'before' });
               }}
               disabled={!prevItem}
@@ -925,6 +927,7 @@ function ItemRow({
               onClick={() => {
                 if (!nextItem) return;
                 pendingReorderFocus.current = 'down';
+                setFocusRequest(v => v + 1);
                 dispatch({ type: 'REORDER_ITEM', id: item.id, targetId: nextItem.id, position: 'after' });
               }}
               disabled={!nextItem}
