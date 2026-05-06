@@ -35,11 +35,13 @@ function DragProvider({
   children,
   categories,
   items,
+  allowCrossPackingListItemReorder = false,
   dispatch,
 }: {
   children: React.ReactNode;
   categories: Category[];
   items: Item[];
+  allowCrossPackingListItemReorder?: boolean;
   dispatch: React.Dispatch<Action>;
 }) {
   const [dragging, setDragging] = useState<DragCtx['dragging']>(null);
@@ -84,10 +86,10 @@ function DragProvider({
     if (
       !draggedItem || !targetItem ||
       draggedItem.categoryId !== targetItem.categoryId ||
-      draggedItem.packingListId !== targetItem.packingListId
+      (!allowCrossPackingListItemReorder && draggedItem.packingListId !== targetItem.packingListId)
     ) return false;
     return true;
-  }, []);
+  }, [allowCrossPackingListItemReorder]);
 
   const onDragOver = useCallback((e: React.DragEvent, targetId: string, type: 'category' | 'item') => {
     const cur = draggingRef.current;
@@ -1449,7 +1451,12 @@ function InventoryView({
   );
 
   return (
-    <DragProvider categories={inventoryCategories} items={items} dispatch={dispatch}>
+    <DragProvider
+      categories={inventoryCategories}
+      items={items}
+      allowCrossPackingListItemReorder
+      dispatch={dispatch}
+    >
       <div className="view">
         <PackingListBar
           packingLists={packingLists}
