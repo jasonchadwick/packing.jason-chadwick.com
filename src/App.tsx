@@ -643,6 +643,7 @@ function CategoryTree({
             <ItemRow
               key={item.id}
               item={item}
+              siblingItems={catItems}
               viewLocation={viewLocation}
               activePackingListId={activePackingListId}
               inventoryEditMode={inventoryEditMode}
@@ -698,6 +699,7 @@ function CategoryTree({
 
 interface ItemRowProps {
   item: Item;
+  siblingItems: Item[];
   viewLocation: Location;
   activePackingListId: string | null;
   inventoryEditMode?: boolean;
@@ -706,6 +708,7 @@ interface ItemRowProps {
 
 function ItemRow({
   item,
+  siblingItems,
   viewLocation,
   activePackingListId,
   inventoryEditMode = false,
@@ -720,6 +723,9 @@ function ItemRow({
   const swipeTracking = useRef(false);
   const swipeEngaged = useRef(false);
   const swipeOffsetRef = useRef(0);
+  const moveUpRef = useRef<HTMLButtonElement>(null);
+  const moveDownRef = useRef<HTMLButtonElement>(null);
+  const pendingReorderFocus = useRef<'up' | 'down' | null>(null);
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [swipeDragging, setSwipeDragging] = useState(false);
   const SWIPE_DELETE_THRESHOLD_PX = 80;
@@ -740,6 +746,16 @@ function ItemRow({
   const isDragging = dragCtx.dragging?.id === item.id && dragCtx.dragging.type === 'item';
   const dropPos = dragCtx.dropTarget?.id === item.id ? dragCtx.dropTarget.position : null;
   const canEditInventory = viewLocation === 'inventory' && inventoryEditMode;
+  const itemIndex = siblingItems.findIndex(i => i.id === item.id);
+  const prevItem = itemIndex > 0 ? siblingItems[itemIndex - 1] : null;
+  const nextItem = itemIndex !== -1 && itemIndex < siblingItems.length - 1 ? siblingItems[itemIndex + 1] : null;
+
+  useEffect(() => {
+    if (!pendingReorderFocus.current) return;
+    if (pendingReorderFocus.current === 'up') moveUpRef.current?.focus();
+    if (pendingReorderFocus.current === 'down') moveDownRef.current?.focus();
+    pendingReorderFocus.current = null;
+  });
 
   return (
     <div className={`item-row-shell${swipeOffset < 0 ? ' swipe-active' : ''}`}>
@@ -882,6 +898,40 @@ function ItemRow({
             </button>
           ) : null}
         </div>
+        {canEditInventory && (
+          <div className="mobile-reorder-controls" aria-label={`Reorder ${item.name}`}>
+            <button
+              ref={moveUpRef}
+              type="button"
+              className="btn-icon"
+              onClick={() => {
+                if (!prevItem) return;
+                pendingReorderFocus.current = 'up';
+                dispatch({ type: 'REORDER_ITEM', id: item.id, targetId: prevItem.id, position: 'before' });
+              }}
+              disabled={!prevItem}
+              aria-label={`Move ${item.name} up`}
+              title="Move up"
+            >
+              ↑
+            </button>
+            <button
+              ref={moveDownRef}
+              type="button"
+              className="btn-icon"
+              onClick={() => {
+                if (!nextItem) return;
+                pendingReorderFocus.current = 'down';
+                dispatch({ type: 'REORDER_ITEM', id: item.id, targetId: nextItem.id, position: 'after' });
+              }}
+              disabled={!nextItem}
+              aria-label={`Move ${item.name} down`}
+              title="Move down"
+            >
+              ↓
+            </button>
+          </div>
+        )}
         {canEditInventory && (
           <span
             className="drag-handle"
@@ -1465,6 +1515,7 @@ function InventoryView({
                 <ItemRow
                   key={item.id}
                   item={item}
+                  siblingItems={uncategorized}
                   viewLocation="inventory"
                   activePackingListId={activePackingListId}
                   inventoryEditMode={inventoryEditMode}

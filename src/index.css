@@ -310,6 +310,13 @@ input {
   opacity: 1;
 }
 
+.mobile-reorder-controls {
+  display: none;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
 .btn-move {
   padding: 3px 8px;
   border-radius: var(--radius-sm);
@@ -480,6 +487,14 @@ input {
     align-items: center;
     justify-content: center;
     font-size: 1.15rem;
+  }
+
+  .item-row .drag-handle {
+    display: none;
+  }
+
+  .item-row .mobile-reorder-controls {
+    display: inline-flex;
   }
 
   .item-row .btn-icon.danger {
