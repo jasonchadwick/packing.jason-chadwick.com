@@ -936,33 +936,8 @@ function ItemRow({
           <span
             className="drag-handle"
             draggable
-            onPointerDown={e => {
-              if (e.pointerType === 'touch') {
-                e.preventDefault();
-                (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-                dragCtx.startDrag(item.id, 'item');
-                return;
-              }
+            onPointerDown={() => {
               isDragHandleActive.current = true;
-            }}
-            onPointerMove={e => {
-              if (e.pointerType !== 'touch') return;
-              e.preventDefault();
-              dragCtx.updatePointerTarget(e.clientX, e.clientY);
-            }}
-            onPointerUp={e => {
-              if (e.pointerType !== 'touch') return;
-              if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
-                (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-              }
-              dragCtx.commitPointerDrop(e.clientX, e.clientY);
-            }}
-            onPointerCancel={e => {
-              if (e.pointerType !== 'touch') return;
-              if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
-                (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-              }
-              dragCtx.endDrag();
             }}
             onDragStart={e => {
               if (!isDragHandleActive.current) { e.preventDefault(); return; }
