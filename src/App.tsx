@@ -748,8 +748,9 @@ function ItemRow({
   const dropPos = dragCtx.dropTarget?.id === item.id ? dragCtx.dropTarget.position : null;
   const canEditInventory = viewLocation === 'inventory' && inventoryEditMode;
   const itemIndex = useMemo(() => siblingItems.findIndex(i => i.id === item.id), [siblingItems, item.id]);
-  const prevItem = itemIndex !== -1 && itemIndex > 0 ? siblingItems[itemIndex - 1] : null;
-  const nextItem = itemIndex !== -1 && itemIndex < siblingItems.length - 1 ? siblingItems[itemIndex + 1] : null;
+  const hasItemIndex = itemIndex !== -1;
+  const prevItem = hasItemIndex && itemIndex > 0 ? siblingItems[itemIndex - 1] : null;
+  const nextItem = hasItemIndex && itemIndex < siblingItems.length - 1 ? siblingItems[itemIndex + 1] : null;
 
   useEffect(() => {
     if (!pendingReorderFocus.current) return;
