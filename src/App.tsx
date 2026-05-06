@@ -747,13 +747,16 @@ function ItemRow({
   const dropPos = dragCtx.dropTarget?.id === item.id ? dragCtx.dropTarget.position : null;
   const canEditInventory = viewLocation === 'inventory' && inventoryEditMode;
   const itemIndex = siblingItems.findIndex(i => i.id === item.id);
-  const prevItem = itemIndex > 0 ? siblingItems[itemIndex - 1] : null;
+  const prevItem = itemIndex !== -1 && itemIndex > 0 ? siblingItems[itemIndex - 1] : null;
   const nextItem = itemIndex !== -1 && itemIndex < siblingItems.length - 1 ? siblingItems[itemIndex + 1] : null;
 
   useEffect(() => {
     if (!pendingReorderFocus.current) return;
-    if (pendingReorderFocus.current === 'up') moveUpRef.current?.focus();
-    if (pendingReorderFocus.current === 'down') moveDownRef.current?.focus();
+    if (pendingReorderFocus.current === 'up') {
+      moveUpRef.current?.focus();
+    } else {
+      moveDownRef.current?.focus();
+    }
     pendingReorderFocus.current = null;
   }, [itemIndex]);
 
