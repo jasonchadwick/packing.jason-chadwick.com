@@ -30,13 +30,13 @@ interface DragCtx {
 }
 
 const DragContext = createContext<DragCtx | null>(null);
-const canReorderSiblingCategories = (dragged: Category, target: Category) => dragged.parentId === target.parentId;
+const defaultCanReorderCategory = (dragged: Category, target: Category) => dragged.parentId === target.parentId;
 
 function DragProvider({
   children,
   categories,
   items,
-  canReorderCategory = canReorderSiblingCategories,
+  canReorderCategory = defaultCanReorderCategory,
   allowCrossPackingListItemReorder = false,
   dispatch,
 }: {
@@ -1267,7 +1267,9 @@ function BagView({ categories, items, activePackingListId, inventoryEditMode, di
     <DragProvider
       categories={allBags}
       items={packingItems}
-      canReorderCategory={(dragged, target) => dragged.bagCategoryId === target.bagCategoryId}
+      canReorderCategory={(dragged, target) =>
+        (dragged.bagCategoryId ?? null) === (target.bagCategoryId ?? null)
+      }
       dispatch={dispatch}
     >
       <>
