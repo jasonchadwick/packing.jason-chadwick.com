@@ -30,17 +30,20 @@ interface DragCtx {
 }
 
 const DragContext = createContext<DragCtx | null>(null);
+const canReorderSiblingCategories = (dragged: Category, target: Category) => dragged.parentId === target.parentId;
 
 function DragProvider({
   children,
   categories,
   items,
+  canReorderCategory = canReorderSiblingCategories,
   allowCrossPackingListItemReorder = false,
   dispatch,
 }: {
   children: React.ReactNode;
   categories: Category[];
   items: Item[];
+  canReorderCategory?: (dragged: Category, target: Category) => boolean;
   allowCrossPackingListItemReorder?: boolean;
   dispatch: React.Dispatch<Action>;
 }) {
@@ -77,7 +80,7 @@ function DragProvider({
     if (type === 'category') {
       const draggedCat = categoriesRef.current.find(c => c.id === cur.id);
       const targetCat = categoriesRef.current.find(c => c.id === targetId);
-      if (!draggedCat || !targetCat || draggedCat.parentId !== targetCat.parentId) return false;
+      if (!draggedCat || !targetCat || !canReorderCategory(draggedCat, targetCat)) return false;
       return true;
     }
 
@@ -89,7 +92,7 @@ function DragProvider({
       (!allowCrossPackingListItemReorder && draggedItem.packingListId !== targetItem.packingListId)
     ) return false;
     return true;
-  }, [allowCrossPackingListItemReorder]);
+  }, [allowCrossPackingListItemReorder, canReorderCategory]);
 
   const onDragOver = useCallback((e: React.DragEvent, targetId: string, type: 'category' | 'item') => {
     const cur = draggingRef.current;
@@ -1261,48 +1264,55 @@ function BagView({ categories, items, activePackingListId, inventoryEditMode, di
   );
 
   return (
-    <>
-      {topLevelBags.map(bag => (
-        <BagSection
-          key={bag.id}
-          bag={bag}
-          allCategories={categories}
-          allBags={allBags}
-          packingItems={packingItems}
-          looseItems={looseItems}
-          depth={0}
-          inventoryEditMode={inventoryEditMode}
-          dispatch={dispatch}
+    <DragProvider
+      categories={allBags}
+      items={packingItems}
+      canReorderCategory={(dragged, target) => dragged.bagCategoryId === target.bagCategoryId}
+      dispatch={dispatch}
+    >
+      <>
+        {topLevelBags.map(bag => (
+          <BagSection
+            key={bag.id}
+            bag={bag}
+            allCategories={categories}
+            allBags={allBags}
+            packingItems={packingItems}
+            looseItems={looseItems}
+            depth={0}
+            inventoryEditMode={inventoryEditMode}
+            dispatch={dispatch}
+          />
+        ))}
+
+        {unassigned.length > 0 && (
+          <div className="category-block uncategorized" style={{ '--depth': 0 } as React.CSSProperties}>
+            <div className="category-header">
+              <span className="category-name muted">Unassigned</span>
+            </div>
+            <div className="category-body">
+              {unassigned.map(item => (
+                <BagItemRow
+                  key={item.id}
+                  item={item}
+                  bags={allBags}
+                  showBagSelector={true}
+                  dispatch={dispatch}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        <AddForm
+          placeholder="Add bag…"
+          onAdd={name =>
+            dispatch({ type: 'ADD_CATEGORY', name, parentId: null, isContainer: true, packingListId: activePackingListId })
+          }
+          className="bag-add-form"
         />
-      ))}
-
-      {unassigned.length > 0 && (
-        <div className="category-block uncategorized" style={{ '--depth': 0 } as React.CSSProperties}>
-          <div className="category-header">
-            <span className="category-name muted">Unassigned</span>
-          </div>
-          <div className="category-body">
-            {unassigned.map(item => (
-              <BagItemRow
-                key={item.id}
-                item={item}
-                bags={allBags}
-                showBagSelector={true}
-                dispatch={dispatch}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      <AddForm
-        placeholder="Add bag…"
-        onAdd={name =>
-          dispatch({ type: 'ADD_CATEGORY', name, parentId: null, isContainer: true, packingListId: activePackingListId })
-        }
-        className="bag-add-form"
-      />
-    </>
+      </>
+    </DragProvider>
   );
 }
 
