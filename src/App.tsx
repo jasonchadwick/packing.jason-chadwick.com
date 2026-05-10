@@ -94,6 +94,28 @@ function DragProvider({
     return true;
   }, [allowCrossPackingListItemReorder, canReorderCategory]);
 
+  const canonicalizeGapTarget = useCallback((
+    cur: { id: string; type: 'category' | 'item' },
+    targetEl: HTMLElement,
+    targetId: string,
+    type: 'category' | 'item',
+    position: 'before' | 'after',
+  ) => {
+    if (position === 'after') return { id: targetId, position };
+
+    let sibling = targetEl.previousElementSibling as HTMLElement | null;
+    while (sibling) {
+      const siblingId = sibling.dataset.dragId;
+      const siblingType = sibling.dataset.dragType;
+      if (siblingId && siblingType === type && canDropOnTarget(cur, siblingId, type)) {
+        return { id: siblingId, position: 'after' as const };
+      }
+      sibling = sibling.previousElementSibling as HTMLElement | null;
+    }
+
+    return { id: targetId, position };
+  }, [canDropOnTarget]);
+
   const onDragOver = useCallback((e: React.DragEvent, targetId: string, type: 'category' | 'item') => {
     const cur = draggingRef.current;
     if (!cur || !canDropOnTarget(cur, targetId, type)) return;
@@ -103,27 +125,12 @@ function DragProvider({
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const position: 'before' | 'after' = e.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
     const currentTarget = e.currentTarget as HTMLElement;
-    let nextTargetId = targetId;
-    let nextPosition: 'before' | 'after' = position;
+    const next = canonicalizeGapTarget(cur, currentTarget, targetId, type, position);
 
-    if (position === 'before') {
-      let sibling = currentTarget.previousElementSibling as HTMLElement | null;
-      while (sibling) {
-        const siblingId = sibling.dataset.dragId;
-        const siblingType = sibling.dataset.dragType;
-        if (siblingId && siblingType === type && canDropOnTarget(cur, siblingId, type)) {
-          nextTargetId = siblingId;
-          nextPosition = 'after';
-          break;
-        }
-        sibling = sibling.previousElementSibling as HTMLElement | null;
-      }
+    if (dropTargetRef.current?.id !== next.id || dropTargetRef.current?.position !== next.position) {
+      setDropTarget({ id: next.id, position: next.position });
     }
-
-    if (dropTargetRef.current?.id !== nextTargetId || dropTargetRef.current?.position !== nextPosition) {
-      setDropTarget({ id: nextTargetId, position: nextPosition });
-    }
-  }, [canDropOnTarget]);
+  }, [canDropOnTarget, canonicalizeGapTarget]);
 
   const resolvePointerDropTarget = useCallback((clientX: number, clientY: number) => {
     const cur = draggingRef.current;
@@ -137,25 +144,9 @@ function DragProvider({
     if (!canDropOnTarget(cur, targetId, targetType)) return null;
     const rect = target.getBoundingClientRect();
     const position: 'before' | 'after' = clientY < rect.top + rect.height / 2 ? 'before' : 'after';
-    let nextTargetId = targetId;
-    let nextPosition: 'before' | 'after' = position;
-
-    if (position === 'before') {
-      let sibling = target.previousElementSibling as HTMLElement | null;
-      while (sibling) {
-        const siblingId = sibling.dataset.dragId;
-        const siblingType = sibling.dataset.dragType;
-        if (siblingId && siblingType === targetType && canDropOnTarget(cur, siblingId, targetType)) {
-          nextTargetId = siblingId;
-          nextPosition = 'after';
-          break;
-        }
-        sibling = sibling.previousElementSibling as HTMLElement | null;
-      }
-    }
-
-    return { id: nextTargetId, type: targetType, position: nextPosition };
-  }, [canDropOnTarget]);
+    const next = canonicalizeGapTarget(cur, target, targetId, targetType, position);
+    return { id: next.id, type: targetType, position: next.position };
+  }, [canDropOnTarget, canonicalizeGapTarget]);
 
   const updatePointerTarget = useCallback((clientX: number, clientY: number) => {
     const target = resolvePointerDropTarget(clientX, clientY);
