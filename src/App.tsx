@@ -102,8 +102,26 @@ function DragProvider({
     e.stopPropagation();
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const position: 'before' | 'after' = e.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
-    if (dropTargetRef.current?.id !== targetId || dropTargetRef.current?.position !== position) {
-      setDropTarget({ id: targetId, position });
+    const currentTarget = e.currentTarget as HTMLElement;
+    let nextTargetId = targetId;
+    let nextPosition: 'before' | 'after' = position;
+
+    if (position === 'before') {
+      let sibling = currentTarget.previousElementSibling as HTMLElement | null;
+      while (sibling) {
+        const siblingId = sibling.dataset.dragId;
+        const siblingType = sibling.dataset.dragType;
+        if (siblingId && siblingType === type && canDropOnTarget(cur, siblingId, type)) {
+          nextTargetId = siblingId;
+          nextPosition = 'after';
+          break;
+        }
+        sibling = sibling.previousElementSibling as HTMLElement | null;
+      }
+    }
+
+    if (dropTargetRef.current?.id !== nextTargetId || dropTargetRef.current?.position !== nextPosition) {
+      setDropTarget({ id: nextTargetId, position: nextPosition });
     }
   }, [canDropOnTarget]);
 
@@ -119,7 +137,24 @@ function DragProvider({
     if (!canDropOnTarget(cur, targetId, targetType)) return null;
     const rect = target.getBoundingClientRect();
     const position: 'before' | 'after' = clientY < rect.top + rect.height / 2 ? 'before' : 'after';
-    return { id: targetId, type: targetType, position };
+    let nextTargetId = targetId;
+    let nextPosition: 'before' | 'after' = position;
+
+    if (position === 'before') {
+      let sibling = target.previousElementSibling as HTMLElement | null;
+      while (sibling) {
+        const siblingId = sibling.dataset.dragId;
+        const siblingType = sibling.dataset.dragType;
+        if (siblingId && siblingType === targetType && canDropOnTarget(cur, siblingId, targetType)) {
+          nextTargetId = siblingId;
+          nextPosition = 'after';
+          break;
+        }
+        sibling = sibling.previousElementSibling as HTMLElement | null;
+      }
+    }
+
+    return { id: nextTargetId, type: targetType, position: nextPosition };
   }, [canDropOnTarget]);
 
   const updatePointerTarget = useCallback((clientX: number, clientY: number) => {
@@ -141,13 +176,15 @@ function DragProvider({
     setDragging(null);
     setDropTarget(null);
 
-    if (!cur || cur.type !== type || cur.id === targetId) return;
+    if (!cur || cur.type !== type) return;
 
+    const finalTargetId = dt?.id ?? targetId;
+    if (cur.id === finalTargetId) return;
     const position = dt?.position ?? 'after';
     if (type === 'category') {
-      dispatch({ type: 'REORDER_CATEGORY', id: cur.id, targetId, position });
+      dispatch({ type: 'REORDER_CATEGORY', id: cur.id, targetId: finalTargetId, position });
     } else {
-      dispatch({ type: 'REORDER_ITEM', id: cur.id, targetId, position });
+      dispatch({ type: 'REORDER_ITEM', id: cur.id, targetId: finalTargetId, position });
     }
   }, [dispatch]);
 
