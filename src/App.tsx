@@ -602,6 +602,7 @@ function CategoryTree({
               if (e.pointerType === 'touch') {
                 e.preventDefault();
                 (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                isDragHandleActive.current = true;
                 dragCtx.startDrag(category.id, 'category');
                 return;
               }
@@ -895,6 +896,7 @@ function ItemRow({
               if (e.pointerType === 'touch') {
                 e.preventDefault();
                 (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                isDragHandleActive.current = true;
                 dragCtx.startDrag(item.id, 'item');
                 return;
               }
@@ -1134,6 +1136,7 @@ function BagSection({ bag, allCategories, allBags, packingItems, looseItems, dep
               if (e.pointerType === 'touch') {
                 e.preventDefault();
                 (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                isDragHandleActive.current = true;
                 dragCtx.startDrag(bag.id, 'category');
                 return;
               }
