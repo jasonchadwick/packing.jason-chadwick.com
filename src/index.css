@@ -171,6 +171,7 @@ input {
 
 /* ── Category Block ──────────────────────────────────────────────────────────── */
 .category-block {
+  position: relative;
   margin: 4px 0;
   border-radius: var(--radius);
   overflow: hidden;
@@ -513,7 +514,7 @@ input {
   position: absolute;
   left: 0;
   right: 0;
-  height: 2px;
+  height: 3px;
   background: var(--color-primary);
   pointer-events: none;
 }
@@ -525,11 +526,27 @@ input {
   top: 100%;
   transform: translateY(-50%);
 }
-.category-block.drop-before {
-  box-shadow: 0 -2px 0 0 var(--color-primary);
-}
+.category-block.drop-before,
 .category-block.drop-after {
-  box-shadow: 0 2px 0 0 var(--color-primary);
+  z-index: 1;
+}
+.category-block.drop-before::before,
+.category-block.drop-after::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--color-primary);
+  pointer-events: none;
+}
+.category-block.drop-before::before {
+  top: 0;
+  transform: translateY(-50%);
+}
+.category-block.drop-after::before {
+  top: 100%;
+  transform: translateY(-50%);
 }
 
 /* ── Container ───────────────────────────────────────────────────────────────── */
