@@ -139,7 +139,7 @@ function DragProvider({
 
     e.preventDefault();
     e.stopPropagation();
-    const hoveredEl = (e.target as HTMLElement | null) ?? (e.currentTarget as HTMLElement | null);
+    const hoveredEl = e.target as HTMLElement;
     const next = resolveTargetFromElementAndY(cur, hoveredEl, e.clientY);
     if (!next) return;
 
