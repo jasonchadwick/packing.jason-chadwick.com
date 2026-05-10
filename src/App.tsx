@@ -49,25 +49,30 @@ function DragProvider({
 }) {
   const [dragging, setDragging] = useState<DragCtx['dragging']>(null);
   const [dropTarget, setDropTarget] = useState<DragCtx['dropTarget']>(null);
+  const [dropIndicator, setDropIndicator] = useState<{ top: number; left: number; width: number } | null>(null);
 
   // Refs keep callbacks free of stale closures without causing re-renders
   const draggingRef = useRef(dragging);
   const dropTargetRef = useRef(dropTarget);
+  const dropIndicatorRef = useRef(dropIndicator);
   const categoriesRef = useRef(categories);
   const itemsRef = useRef(items);
   useEffect(() => { draggingRef.current = dragging; }, [dragging]);
   useEffect(() => { dropTargetRef.current = dropTarget; }, [dropTarget]);
+  useEffect(() => { dropIndicatorRef.current = dropIndicator; }, [dropIndicator]);
   useEffect(() => { categoriesRef.current = categories; }, [categories]);
   useEffect(() => { itemsRef.current = items; }, [items]);
 
   const startDrag = useCallback((id: string, type: 'category' | 'item') => {
     setDragging({ id, type });
     setDropTarget(null);
+    setDropIndicator(null);
   }, []);
 
   const endDrag = useCallback(() => {
     setDragging(null);
     setDropTarget(null);
+    setDropIndicator(null);
   }, []);
 
   const canDropOnTarget = useCallback((
@@ -94,26 +99,26 @@ function DragProvider({
     return true;
   }, [allowCrossPackingListItemReorder, canReorderCategory]);
 
-  const canonicalizeGapTarget = useCallback((
+  const findAdjacentDroppableSibling = useCallback((
     cur: { id: string; type: 'category' | 'item' },
-    targetEl: HTMLElement,
-    targetId: string,
+    start: HTMLElement,
     type: 'category' | 'item',
-    position: 'before' | 'after',
+    direction: 'previous' | 'next',
   ) => {
-    if (position === 'after') return { id: targetId, position };
-
-    let sibling = targetEl.previousElementSibling as HTMLElement | null;
+    let sibling = direction === 'previous'
+      ? start.previousElementSibling as HTMLElement | null
+      : start.nextElementSibling as HTMLElement | null;
     while (sibling) {
       const siblingId = sibling.dataset.dragId;
       const siblingType = sibling.dataset.dragType;
       if (siblingId && siblingType === type && canDropOnTarget(cur, siblingId, type)) {
-        return { id: siblingId, position: 'after' as const };
+        return sibling;
       }
-      sibling = sibling.previousElementSibling as HTMLElement | null;
+      sibling = direction === 'previous'
+        ? sibling.previousElementSibling as HTMLElement | null
+        : sibling.nextElementSibling as HTMLElement | null;
     }
-
-    return { id: targetId, position };
+    return null;
   }, [canDropOnTarget]);
 
   const resolveTargetFromElementAndY = useCallback((
@@ -127,11 +132,47 @@ function DragProvider({
     const targetType = target.dataset.dragType;
     if (!targetId || (targetType !== 'category' && targetType !== 'item')) return null;
     if (!canDropOnTarget(cur, targetId, targetType)) return null;
+
     const rect = target.getBoundingClientRect();
-    const position: 'before' | 'after' = clientY < rect.top + rect.height / 2 ? 'before' : 'after';
-    const next = canonicalizeGapTarget(cur, target, targetId, targetType, position);
-    return { id: next.id, type: targetType, position: next.position };
-  }, [canDropOnTarget, canonicalizeGapTarget]);
+    const isAboveMidpoint = clientY < rect.top + rect.height / 2;
+
+    const lower = isAboveMidpoint
+      ? target
+      : findAdjacentDroppableSibling(cur, target, targetType, 'next');
+    const upper = isAboveMidpoint
+      ? findAdjacentDroppableSibling(cur, target, targetType, 'previous')
+      : target;
+
+    if (!upper && !lower) return null;
+
+    const upperRect = upper?.getBoundingClientRect();
+    const lowerRect = lower?.getBoundingClientRect();
+    const indicatorTop = upperRect && lowerRect
+      ? (upperRect.bottom + lowerRect.top) / 2
+      : upperRect?.bottom ?? lowerRect!.top;
+    const left = upperRect && lowerRect
+      ? Math.min(upperRect.left, lowerRect.left)
+      : upperRect?.left ?? lowerRect!.left;
+    const right = upperRect && lowerRect
+      ? Math.max(upperRect.right, lowerRect.right)
+      : upperRect?.right ?? lowerRect!.right;
+
+    const upperId = upper?.dataset.dragId;
+    const lowerId = lower?.dataset.dragId;
+    const actionTarget = upperId
+      ? { id: upperId, position: 'after' as const }
+      : lowerId
+        ? { id: lowerId, position: 'before' as const }
+        : null;
+    if (!actionTarget) return null;
+
+    return {
+      id: actionTarget.id,
+      type: targetType,
+      position: actionTarget.position,
+      indicator: { top: indicatorTop, left, width: Math.max(0, right - left) },
+    };
+  }, [canDropOnTarget, findAdjacentDroppableSibling]);
 
   const onDragOver = useCallback((e: React.DragEvent, targetId: string, type: 'category' | 'item') => {
     const cur = draggingRef.current;
@@ -146,6 +187,13 @@ function DragProvider({
     if (dropTargetRef.current?.id !== next.id || dropTargetRef.current?.position !== next.position) {
       setDropTarget({ id: next.id, position: next.position });
     }
+    if (
+      dropIndicatorRef.current?.top !== next.indicator.top ||
+      dropIndicatorRef.current?.left !== next.indicator.left ||
+      dropIndicatorRef.current?.width !== next.indicator.width
+    ) {
+      setDropIndicator(next.indicator);
+    }
   }, [canDropOnTarget, resolveTargetFromElementAndY]);
 
   const resolvePointerDropTarget = useCallback((clientX: number, clientY: number) => {
@@ -159,10 +207,18 @@ function DragProvider({
     const target = resolvePointerDropTarget(clientX, clientY);
     if (!target) {
       if (dropTargetRef.current !== null) setDropTarget(null);
+      if (dropIndicatorRef.current !== null) setDropIndicator(null);
       return;
     }
     if (dropTargetRef.current?.id !== target.id || dropTargetRef.current?.position !== target.position) {
       setDropTarget({ id: target.id, position: target.position });
+    }
+    if (
+      dropIndicatorRef.current?.top !== target.indicator.top ||
+      dropIndicatorRef.current?.left !== target.indicator.left ||
+      dropIndicatorRef.current?.width !== target.indicator.width
+    ) {
+      setDropIndicator(target.indicator);
     }
   }, [resolvePointerDropTarget]);
 
@@ -173,6 +229,7 @@ function DragProvider({
     const dt = dropTargetRef.current;
     setDragging(null);
     setDropTarget(null);
+    setDropIndicator(null);
 
     if (!cur || cur.type !== type) return;
 
@@ -194,6 +251,7 @@ function DragProvider({
       : dropTargetRef.current;
     setDragging(null);
     setDropTarget(null);
+    setDropIndicator(null);
     if (!cur || !dt) return;
     if (cur.id === dt.id) return;
     if (cur.type === 'category') {
@@ -217,7 +275,21 @@ function DragProvider({
     [dragging, dropTarget, startDrag, endDrag, onDragOver, onDrop, updatePointerTarget, commitPointerDrop],
   );
 
-  return <DragContext.Provider value={ctx}>{children}</DragContext.Provider>;
+  return (
+    <DragContext.Provider value={ctx}>
+      {children}
+      {dropIndicator && (
+        <div
+          className="drop-indicator-line"
+          style={{
+            top: dropIndicator.top,
+            left: dropIndicator.left,
+            width: dropIndicator.width,
+          }}
+        />
+      )}
+    </DragContext.Provider>
+  );
 }
 
 // ── Weight Context ────────────────────────────────────────────────────────────
@@ -538,7 +610,6 @@ function CategoryTree({
   }
 
   const isDragging = dragCtx.dragging?.id === category.id && dragCtx.dragging.type === 'category';
-  const dropPos = dragCtx.dropTarget?.id === category.id ? dragCtx.dropTarget.position : null;
   const canEditInventory = viewLocation === 'inventory' && inventoryEditMode;
 
   return (
@@ -546,7 +617,7 @@ function CategoryTree({
       ref={blockRef}
       data-drag-id={category.id}
       data-drag-type="category"
-      className={`category-block${isDragging ? ' is-dragging' : ''}${dropPos ? ` drop-${dropPos}` : ''}`}
+      className={`category-block${isDragging ? ' is-dragging' : ''}`}
       style={{ '--depth': depth } as React.CSSProperties}
     >
       <div
@@ -779,7 +850,6 @@ function ItemRow({
   }, []);
 
   const isDragging = dragCtx.dragging?.id === item.id && dragCtx.dragging.type === 'item';
-  const dropPos = dragCtx.dropTarget?.id === item.id ? dragCtx.dropTarget.position : null;
   const canEditInventory = viewLocation === 'inventory' && inventoryEditMode;
 
   return (
@@ -791,7 +861,7 @@ function ItemRow({
         ref={rowRef}
         data-drag-id={item.id}
         data-drag-type="item"
-        className={`item-row${item.checked ? ' checked' : ''}${isDragging ? ' is-dragging' : ''}${dropPos ? ` drop-${dropPos}` : ''}${viewLocation === 'inventory' && item.packingListId === activePackingListId && activePackingListId !== null ? ' in-packing' : ''}`}
+        className={`item-row${item.checked ? ' checked' : ''}${isDragging ? ' is-dragging' : ''}${viewLocation === 'inventory' && item.packingListId === activePackingListId && activePackingListId !== null ? ' in-packing' : ''}`}
         onDragOver={e => dragCtx.onDragOver(e, item.id, 'item')}
         onDrop={e => dragCtx.onDrop(e, item.id, 'item')}
         onPointerDown={e => {
@@ -1093,14 +1163,13 @@ function BagSection({ bag, allCategories, allBags, packingItems, looseItems, dep
   // Pure bags (packingListId !== null) can be edited/deleted; inventory containers cannot be deleted from bag view
   const isPureBag = bag.packingListId !== null;
   const isDragging = dragCtx.dragging?.id === bag.id && dragCtx.dragging.type === 'category';
-  const dropPos = dragCtx.dropTarget?.id === bag.id ? dragCtx.dropTarget.position : null;
 
   return (
     <div
       ref={blockRef}
       data-drag-id={bag.id}
       data-drag-type="category"
-      className={`category-block${isDragging ? ' is-dragging' : ''}${dropPos ? ` drop-${dropPos}` : ''}`}
+      className={`category-block${isDragging ? ' is-dragging' : ''}`}
       style={{ '--depth': depth } as React.CSSProperties}
     >
       <div

@@ -501,52 +501,14 @@ input {
   opacity: 0.35;
 }
 
-/* Drop line indicators */
-.item-row.drop-before {
-  z-index: 1;
-}
-.item-row.drop-after {
-  z-index: 1;
-}
-.item-row.drop-before::before,
-.item-row.drop-after::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
+/* Drop line indicator */
+.drop-indicator-line {
+  position: fixed;
   height: 3px;
   background: var(--color-primary);
+  transform: translateY(-50%);
   pointer-events: none;
-}
-.item-row.drop-before::before {
-  top: 0;
-  transform: translateY(-50%);
-}
-.item-row.drop-after::before {
-  top: 100%;
-  transform: translateY(-50%);
-}
-.category-block.drop-before,
-.category-block.drop-after {
-  z-index: 1;
-}
-.category-block.drop-before::before,
-.category-block.drop-after::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: var(--color-primary);
-  pointer-events: none;
-}
-.category-block.drop-before::before {
-  top: 0;
-  transform: translateY(-50%);
-}
-.category-block.drop-after::before {
-  top: 100%;
-  transform: translateY(-50%);
+  z-index: 1000;
 }
 
 /* ── Container ───────────────────────────────────────────────────────────────── */
