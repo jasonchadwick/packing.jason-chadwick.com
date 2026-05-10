@@ -237,6 +237,7 @@ input {
 
 /* ── Item Row ────────────────────────────────────────────────────────────────── */
 .item-row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -308,13 +309,6 @@ input {
 }
 .item-row.in-packing .item-actions {
   opacity: 1;
-}
-
-.mobile-reorder-controls {
-  display: none;
-  align-items: center;
-  gap: 2px;
-  flex-shrink: 0;
 }
 
 .btn-move {
@@ -489,14 +483,6 @@ input {
     font-size: 1.15rem;
   }
 
-  .item-row .drag-handle {
-    display: none;
-  }
-
-  .item-row .mobile-reorder-controls {
-    display: inline-flex;
-  }
-
   .item-row .btn-icon.danger {
     position: absolute !important;
     width: 1px !important;
@@ -516,10 +502,28 @@ input {
 
 /* Drop line indicators */
 .item-row.drop-before {
-  box-shadow: inset 0 2px 0 0 var(--color-primary);
+  z-index: 1;
 }
 .item-row.drop-after {
-  box-shadow: inset 0 -2px 0 0 var(--color-primary);
+  z-index: 1;
+}
+.item-row.drop-before::before,
+.item-row.drop-after::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--color-primary);
+  pointer-events: none;
+}
+.item-row.drop-before::before {
+  top: 0;
+  transform: translateY(-50%);
+}
+.item-row.drop-after::before {
+  top: 100%;
+  transform: translateY(-50%);
 }
 .category-block.drop-before {
   box-shadow: 0 -2px 0 0 var(--color-primary);

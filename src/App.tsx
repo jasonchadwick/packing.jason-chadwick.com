@@ -648,7 +648,6 @@ function CategoryTree({
             <ItemRow
               key={item.id}
               item={item}
-              siblingItems={catItems}
               viewLocation={viewLocation}
               activePackingListId={activePackingListId}
               inventoryEditMode={inventoryEditMode}
@@ -704,7 +703,6 @@ function CategoryTree({
 
 interface ItemRowProps {
   item: Item;
-  siblingItems: Item[];
   viewLocation: Location;
   activePackingListId: string | null;
   inventoryEditMode?: boolean;
@@ -713,7 +711,6 @@ interface ItemRowProps {
 
 function ItemRow({
   item,
-  siblingItems,
   viewLocation,
   activePackingListId,
   inventoryEditMode = false,
@@ -748,10 +745,6 @@ function ItemRow({
   const isDragging = dragCtx.dragging?.id === item.id && dragCtx.dragging.type === 'item';
   const dropPos = dragCtx.dropTarget?.id === item.id ? dragCtx.dropTarget.position : null;
   const canEditInventory = viewLocation === 'inventory' && inventoryEditMode;
-  const itemIndex = siblingItems.findIndex(i => i.id === item.id);
-  const hasItemIndex = itemIndex !== -1;
-  const prevItem = hasItemIndex && itemIndex > 0 ? siblingItems[itemIndex - 1] : null;
-  const nextItem = hasItemIndex && itemIndex < siblingItems.length - 1 ? siblingItems[itemIndex + 1] : null;
 
   return (
     <div className={`item-row-shell${swipeOffset < 0 ? ' swipe-active' : ''}`}>
@@ -895,45 +888,36 @@ function ItemRow({
           ) : null}
         </div>
         {canEditInventory && (
-          <div className="mobile-reorder-controls" aria-label={`Reorder ${item.name}`}>
-            <button
-              type="button"
-              className="btn-icon"
-              onClick={e => {
-                if (!prevItem) return;
-                dispatch({ type: 'REORDER_ITEM', id: item.id, targetId: prevItem.id, position: 'before' });
-                const button = e.currentTarget;
-                requestAnimationFrame(() => button.focus());
-              }}
-              disabled={!prevItem}
-              aria-label={`Move ${item.name} up`}
-              title="Move up"
-            >
-              ↑
-            </button>
-            <button
-              type="button"
-              className="btn-icon"
-              onClick={e => {
-                if (!nextItem) return;
-                dispatch({ type: 'REORDER_ITEM', id: item.id, targetId: nextItem.id, position: 'after' });
-                const button = e.currentTarget;
-                requestAnimationFrame(() => button.focus());
-              }}
-              disabled={!nextItem}
-              aria-label={`Move ${item.name} down`}
-              title="Move down"
-            >
-              ↓
-            </button>
-          </div>
-        )}
-        {canEditInventory && (
           <span
             className="drag-handle"
             draggable
-            onPointerDown={() => {
+            onPointerDown={e => {
+              if (e.pointerType === 'touch') {
+                e.preventDefault();
+                (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                dragCtx.startDrag(item.id, 'item');
+                return;
+              }
               isDragHandleActive.current = true;
+            }}
+            onPointerMove={e => {
+              if (e.pointerType !== 'touch') return;
+              e.preventDefault();
+              dragCtx.updatePointerTarget(e.clientX, e.clientY);
+            }}
+            onPointerUp={e => {
+              if (e.pointerType !== 'touch') return;
+              if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
+                (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+              }
+              dragCtx.commitPointerDrop(e.clientX, e.clientY);
+            }}
+            onPointerCancel={e => {
+              if (e.pointerType !== 'touch') return;
+              if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
+                (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+              }
+              dragCtx.endDrag();
             }}
             onDragStart={e => {
               if (!isDragHandleActive.current) { e.preventDefault(); return; }
@@ -1500,7 +1484,6 @@ function InventoryView({
                 <ItemRow
                   key={item.id}
                   item={item}
-                  siblingItems={uncategorized}
                   viewLocation="inventory"
                   activePackingListId={activePackingListId}
                   inventoryEditMode={inventoryEditMode}
