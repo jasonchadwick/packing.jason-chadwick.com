@@ -116,27 +116,12 @@ function DragProvider({
     return { id: targetId, position };
   }, [canDropOnTarget]);
 
-  const onDragOver = useCallback((e: React.DragEvent, targetId: string, type: 'category' | 'item') => {
-    const cur = draggingRef.current;
-    if (!cur || !canDropOnTarget(cur, targetId, type)) return;
-
-    e.preventDefault();
-    e.stopPropagation();
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const position: 'before' | 'after' = e.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
-    const currentTarget = e.currentTarget as HTMLElement;
-    const next = canonicalizeGapTarget(cur, currentTarget, targetId, type, position);
-
-    if (dropTargetRef.current?.id !== next.id || dropTargetRef.current?.position !== next.position) {
-      setDropTarget({ id: next.id, position: next.position });
-    }
-  }, [canDropOnTarget, canonicalizeGapTarget]);
-
-  const resolvePointerDropTarget = useCallback((clientX: number, clientY: number) => {
-    const cur = draggingRef.current;
-    if (!cur) return null;
-    const element = document.elementFromPoint(clientX, clientY) as HTMLElement | null;
-    const target = element?.closest<HTMLElement>('[data-drag-id][data-drag-type]');
+  const resolveTargetFromElementAndY = useCallback((
+    cur: { id: string; type: 'category' | 'item' },
+    rawElement: HTMLElement | null,
+    clientY: number,
+  ) => {
+    const target = rawElement?.closest<HTMLElement>('[data-drag-id][data-drag-type]');
     if (!target) return null;
     const targetId = target.dataset.dragId;
     const targetType = target.dataset.dragType;
@@ -147,6 +132,28 @@ function DragProvider({
     const next = canonicalizeGapTarget(cur, target, targetId, targetType, position);
     return { id: next.id, type: targetType, position: next.position };
   }, [canDropOnTarget, canonicalizeGapTarget]);
+
+  const onDragOver = useCallback((e: React.DragEvent, targetId: string, type: 'category' | 'item') => {
+    const cur = draggingRef.current;
+    if (!cur || !canDropOnTarget(cur, targetId, type)) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    const hoveredEl = (e.target as HTMLElement | null) ?? (e.currentTarget as HTMLElement | null);
+    const next = resolveTargetFromElementAndY(cur, hoveredEl, e.clientY);
+    if (!next) return;
+
+    if (dropTargetRef.current?.id !== next.id || dropTargetRef.current?.position !== next.position) {
+      setDropTarget({ id: next.id, position: next.position });
+    }
+  }, [canDropOnTarget, resolveTargetFromElementAndY]);
+
+  const resolvePointerDropTarget = useCallback((clientX: number, clientY: number) => {
+    const cur = draggingRef.current;
+    if (!cur) return null;
+    const element = document.elementFromPoint(clientX, clientY) as HTMLElement | null;
+    return resolveTargetFromElementAndY(cur, element, clientY);
+  }, [resolveTargetFromElementAndY]);
 
   const updatePointerTarget = useCallback((clientX: number, clientY: number) => {
     const target = resolvePointerDropTarget(clientX, clientY);
