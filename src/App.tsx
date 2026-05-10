@@ -30,39 +30,49 @@ interface DragCtx {
 }
 
 const DragContext = createContext<DragCtx | null>(null);
+const defaultCanReorderCategory = (dragged: Category, target: Category) => dragged.parentId === target.parentId;
 
 function DragProvider({
   children,
   categories,
   items,
+  canReorderCategory = defaultCanReorderCategory,
+  allowCrossPackingListItemReorder = false,
   dispatch,
 }: {
   children: React.ReactNode;
   categories: Category[];
   items: Item[];
+  canReorderCategory?: (dragged: Category, target: Category) => boolean;
+  allowCrossPackingListItemReorder?: boolean;
   dispatch: React.Dispatch<Action>;
 }) {
   const [dragging, setDragging] = useState<DragCtx['dragging']>(null);
   const [dropTarget, setDropTarget] = useState<DragCtx['dropTarget']>(null);
+  const [dropIndicator, setDropIndicator] = useState<{ top: number; left: number; width: number } | null>(null);
 
   // Refs keep callbacks free of stale closures without causing re-renders
   const draggingRef = useRef(dragging);
   const dropTargetRef = useRef(dropTarget);
+  const dropIndicatorRef = useRef(dropIndicator);
   const categoriesRef = useRef(categories);
   const itemsRef = useRef(items);
   useEffect(() => { draggingRef.current = dragging; }, [dragging]);
   useEffect(() => { dropTargetRef.current = dropTarget; }, [dropTarget]);
+  useEffect(() => { dropIndicatorRef.current = dropIndicator; }, [dropIndicator]);
   useEffect(() => { categoriesRef.current = categories; }, [categories]);
   useEffect(() => { itemsRef.current = items; }, [items]);
 
   const startDrag = useCallback((id: string, type: 'category' | 'item') => {
     setDragging({ id, type });
     setDropTarget(null);
+    setDropIndicator(null);
   }, []);
 
   const endDrag = useCallback(() => {
     setDragging(null);
     setDropTarget(null);
+    setDropIndicator(null);
   }, []);
 
   const canDropOnTarget = useCallback((
@@ -75,7 +85,7 @@ function DragProvider({
     if (type === 'category') {
       const draggedCat = categoriesRef.current.find(c => c.id === cur.id);
       const targetCat = categoriesRef.current.find(c => c.id === targetId);
-      if (!draggedCat || !targetCat || draggedCat.parentId !== targetCat.parentId) return false;
+      if (!draggedCat || !targetCat || !canReorderCategory(draggedCat, targetCat)) return false;
       return true;
     }
 
@@ -84,10 +94,96 @@ function DragProvider({
     if (
       !draggedItem || !targetItem ||
       draggedItem.categoryId !== targetItem.categoryId ||
-      draggedItem.packingListId !== targetItem.packingListId
+      (!allowCrossPackingListItemReorder && draggedItem.packingListId !== targetItem.packingListId)
     ) return false;
     return true;
-  }, []);
+  }, [allowCrossPackingListItemReorder, canReorderCategory]);
+
+  const findAdjacentDroppableSibling = useCallback((
+    cur: { id: string; type: 'category' | 'item' },
+    start: HTMLElement,
+    type: 'category' | 'item',
+    direction: 'previous' | 'next',
+  ) => {
+    let sibling = direction === 'previous'
+      ? start.previousElementSibling as HTMLElement | null
+      : start.nextElementSibling as HTMLElement | null;
+    while (sibling) {
+      const siblingId = sibling.dataset.dragId;
+      const siblingType = sibling.dataset.dragType;
+      if (siblingId && siblingType === type && canDropOnTarget(cur, siblingId, type)) {
+        return sibling;
+      }
+      sibling = direction === 'previous'
+        ? sibling.previousElementSibling as HTMLElement | null
+        : sibling.nextElementSibling as HTMLElement | null;
+    }
+    return null;
+  }, [canDropOnTarget]);
+
+  const resolveTargetFromElementAndY = useCallback((
+    cur: { id: string; type: 'category' | 'item' },
+    rawElement: HTMLElement | null,
+    clientY: number,
+  ) => {
+    const target = rawElement?.closest<HTMLElement>('[data-drag-id][data-drag-type]');
+    if (!target) return null;
+    const targetId = target.dataset.dragId;
+    const targetType = target.dataset.dragType;
+    if (!targetId || (targetType !== 'category' && targetType !== 'item')) return null;
+    if (!canDropOnTarget(cur, targetId, targetType)) return null;
+
+    const rect = target.getBoundingClientRect();
+    const isAboveMidpoint = clientY < rect.top + rect.height / 2;
+
+    const lower = isAboveMidpoint
+      ? target
+      : findAdjacentDroppableSibling(cur, target, targetType, 'next');
+    const upper = isAboveMidpoint
+      ? findAdjacentDroppableSibling(cur, target, targetType, 'previous')
+      : target;
+
+    if (!upper && !lower) return null;
+
+    const upperRect = upper?.getBoundingClientRect();
+    const lowerRect = lower?.getBoundingClientRect();
+    if (!upperRect && !lowerRect) return null;
+    const singleRect = upperRect ?? lowerRect;
+    if (!singleRect) return null;
+
+    let indicatorTop: number;
+    let left: number;
+    let right: number;
+    if (upperRect && lowerRect) {
+      indicatorTop = (upperRect.bottom + lowerRect.top) / 2;
+      left = Math.min(upperRect.left, lowerRect.left);
+      right = Math.max(upperRect.right, lowerRect.right);
+    } else if (upperRect) {
+      indicatorTop = upperRect.bottom;
+      left = upperRect.left;
+      right = upperRect.right;
+    } else {
+      indicatorTop = singleRect.top;
+      left = singleRect.left;
+      right = singleRect.right;
+    }
+
+    const upperId = upper?.dataset.dragId;
+    const lowerId = lower?.dataset.dragId;
+    const actionTarget = upperId
+      ? { id: upperId, position: 'after' as const }
+      : lowerId
+        ? { id: lowerId, position: 'before' as const }
+        : null;
+    if (!actionTarget) return null;
+
+    return {
+      id: actionTarget.id,
+      type: targetType,
+      position: actionTarget.position,
+      indicator: { top: indicatorTop, left, width: Math.max(0, right - left) },
+    };
+  }, [canDropOnTarget, findAdjacentDroppableSibling]);
 
   const onDragOver = useCallback((e: React.DragEvent, targetId: string, type: 'category' | 'item') => {
     const cur = draggingRef.current;
@@ -95,36 +191,45 @@ function DragProvider({
 
     e.preventDefault();
     e.stopPropagation();
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const position: 'before' | 'after' = e.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
-    if (dropTargetRef.current?.id !== targetId || dropTargetRef.current?.position !== position) {
-      setDropTarget({ id: targetId, position });
+    const hoveredEl = e.target as HTMLElement;
+    const next = resolveTargetFromElementAndY(cur, hoveredEl, e.clientY);
+    if (!next) return;
+
+    if (dropTargetRef.current?.id !== next.id || dropTargetRef.current?.position !== next.position) {
+      setDropTarget({ id: next.id, position: next.position });
     }
-  }, [canDropOnTarget]);
+    if (
+      dropIndicatorRef.current?.top !== next.indicator.top ||
+      dropIndicatorRef.current?.left !== next.indicator.left ||
+      dropIndicatorRef.current?.width !== next.indicator.width
+    ) {
+      setDropIndicator(next.indicator);
+    }
+  }, [canDropOnTarget, resolveTargetFromElementAndY]);
 
   const resolvePointerDropTarget = useCallback((clientX: number, clientY: number) => {
     const cur = draggingRef.current;
     if (!cur) return null;
     const element = document.elementFromPoint(clientX, clientY) as HTMLElement | null;
-    const target = element?.closest<HTMLElement>('[data-drag-id][data-drag-type]');
-    if (!target) return null;
-    const targetId = target.dataset.dragId;
-    const targetType = target.dataset.dragType;
-    if (!targetId || (targetType !== 'category' && targetType !== 'item')) return null;
-    if (!canDropOnTarget(cur, targetId, targetType)) return null;
-    const rect = target.getBoundingClientRect();
-    const position: 'before' | 'after' = clientY < rect.top + rect.height / 2 ? 'before' : 'after';
-    return { id: targetId, type: targetType, position };
-  }, [canDropOnTarget]);
+    return resolveTargetFromElementAndY(cur, element, clientY);
+  }, [resolveTargetFromElementAndY]);
 
   const updatePointerTarget = useCallback((clientX: number, clientY: number) => {
     const target = resolvePointerDropTarget(clientX, clientY);
     if (!target) {
       if (dropTargetRef.current !== null) setDropTarget(null);
+      if (dropIndicatorRef.current !== null) setDropIndicator(null);
       return;
     }
     if (dropTargetRef.current?.id !== target.id || dropTargetRef.current?.position !== target.position) {
       setDropTarget({ id: target.id, position: target.position });
+    }
+    if (
+      dropIndicatorRef.current?.top !== target.indicator.top ||
+      dropIndicatorRef.current?.left !== target.indicator.left ||
+      dropIndicatorRef.current?.width !== target.indicator.width
+    ) {
+      setDropIndicator(target.indicator);
     }
   }, [resolvePointerDropTarget]);
 
@@ -135,14 +240,17 @@ function DragProvider({
     const dt = dropTargetRef.current;
     setDragging(null);
     setDropTarget(null);
+    setDropIndicator(null);
 
-    if (!cur || cur.type !== type || cur.id === targetId) return;
+    if (!cur || cur.type !== type) return;
 
+    const finalTargetId = dt?.id ?? targetId;
+    if (cur.id === finalTargetId) return;
     const position = dt?.position ?? 'after';
     if (type === 'category') {
-      dispatch({ type: 'REORDER_CATEGORY', id: cur.id, targetId, position });
+      dispatch({ type: 'REORDER_CATEGORY', id: cur.id, targetId: finalTargetId, position });
     } else {
-      dispatch({ type: 'REORDER_ITEM', id: cur.id, targetId, position });
+      dispatch({ type: 'REORDER_ITEM', id: cur.id, targetId: finalTargetId, position });
     }
   }, [dispatch]);
 
@@ -154,6 +262,7 @@ function DragProvider({
       : dropTargetRef.current;
     setDragging(null);
     setDropTarget(null);
+    setDropIndicator(null);
     if (!cur || !dt) return;
     if (cur.id === dt.id) return;
     if (cur.type === 'category') {
@@ -177,7 +286,21 @@ function DragProvider({
     [dragging, dropTarget, startDrag, endDrag, onDragOver, onDrop, updatePointerTarget, commitPointerDrop],
   );
 
-  return <DragContext.Provider value={ctx}>{children}</DragContext.Provider>;
+  return (
+    <DragContext.Provider value={ctx}>
+      {children}
+      {dropIndicator && (
+        <div
+          className="drop-indicator-line"
+          style={{
+            top: dropIndicator.top,
+            left: dropIndicator.left,
+            width: dropIndicator.width,
+          }}
+        />
+      )}
+    </DragContext.Provider>
+  );
 }
 
 // ── Weight Context ────────────────────────────────────────────────────────────
@@ -498,7 +621,6 @@ function CategoryTree({
   }
 
   const isDragging = dragCtx.dragging?.id === category.id && dragCtx.dragging.type === 'category';
-  const dropPos = dragCtx.dropTarget?.id === category.id ? dragCtx.dropTarget.position : null;
   const canEditInventory = viewLocation === 'inventory' && inventoryEditMode;
 
   return (
@@ -506,7 +628,7 @@ function CategoryTree({
       ref={blockRef}
       data-drag-id={category.id}
       data-drag-type="category"
-      className={`category-block${isDragging ? ' is-dragging' : ''}${dropPos ? ` drop-${dropPos}` : ''}`}
+      className={`category-block${isDragging ? ' is-dragging' : ''}`}
       style={{ '--depth': depth } as React.CSSProperties}
     >
       <div
@@ -597,6 +719,7 @@ function CategoryTree({
               if (e.pointerType === 'touch') {
                 e.preventDefault();
                 (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                isDragHandleActive.current = true;
                 dragCtx.startDrag(category.id, 'category');
                 return;
               }
@@ -738,7 +861,6 @@ function ItemRow({
   }, []);
 
   const isDragging = dragCtx.dragging?.id === item.id && dragCtx.dragging.type === 'item';
-  const dropPos = dragCtx.dropTarget?.id === item.id ? dragCtx.dropTarget.position : null;
   const canEditInventory = viewLocation === 'inventory' && inventoryEditMode;
 
   return (
@@ -750,7 +872,7 @@ function ItemRow({
         ref={rowRef}
         data-drag-id={item.id}
         data-drag-type="item"
-        className={`item-row${viewLocation === 'packing' && item.checked ? ' checked' : ''}${isDragging ? ' is-dragging' : ''}${dropPos ? ` drop-${dropPos}` : ''}${viewLocation === 'inventory' && item.packingListId === activePackingListId && activePackingListId !== null ? ' in-packing' : ''}`}
+        className={`item-row${viewLocation === 'packing' && item.checked ? ' checked' : ''}${isDragging ? ' is-dragging' : ''}${viewLocation === 'inventory' && item.packingListId === activePackingListId && activePackingListId !== null ? ' in-packing' : ''}`}
         onDragOver={e => dragCtx.onDragOver(e, item.id, 'item')}
         onDrop={e => dragCtx.onDrop(e, item.id, 'item')}
         onPointerDown={e => {
@@ -890,6 +1012,7 @@ function ItemRow({
               if (e.pointerType === 'touch') {
                 e.preventDefault();
                 (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                isDragHandleActive.current = true;
                 dragCtx.startDrag(item.id, 'item');
                 return;
               }
@@ -1051,14 +1174,13 @@ function BagSection({ bag, allCategories, allBags, packingItems, looseItems, dep
   // Pure bags (packingListId !== null) can be edited/deleted; inventory containers cannot be deleted from bag view
   const isPureBag = bag.packingListId !== null;
   const isDragging = dragCtx.dragging?.id === bag.id && dragCtx.dragging.type === 'category';
-  const dropPos = dragCtx.dropTarget?.id === bag.id ? dragCtx.dropTarget.position : null;
 
   return (
     <div
       ref={blockRef}
       data-drag-id={bag.id}
       data-drag-type="category"
-      className={`category-block${isDragging ? ' is-dragging' : ''}${dropPos ? ` drop-${dropPos}` : ''}`}
+      className={`category-block${isDragging ? ' is-dragging' : ''}`}
       style={{ '--depth': depth } as React.CSSProperties}
     >
       <div
@@ -1129,6 +1251,7 @@ function BagSection({ bag, allCategories, allBags, packingItems, looseItems, dep
               if (e.pointerType === 'touch') {
                 e.preventDefault();
                 (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                isDragHandleActive.current = true;
                 dragCtx.startDrag(bag.id, 'category');
                 return;
               }
@@ -1243,48 +1366,57 @@ function BagView({ categories, items, activePackingListId, inventoryEditMode, di
   );
 
   return (
-    <>
-      {topLevelBags.map(bag => (
-        <BagSection
-          key={bag.id}
-          bag={bag}
-          allCategories={categories}
-          allBags={allBags}
-          packingItems={packingItems}
-          looseItems={looseItems}
-          depth={0}
-          inventoryEditMode={inventoryEditMode}
-          dispatch={dispatch}
+    <DragProvider
+      categories={allBags}
+      items={packingItems}
+      canReorderCategory={(dragged, target) =>
+        (dragged.bagCategoryId ?? null) === (target.bagCategoryId ?? null)
+      }
+      dispatch={dispatch}
+    >
+      <>
+        {topLevelBags.map(bag => (
+          <BagSection
+            key={bag.id}
+            bag={bag}
+            allCategories={categories}
+            allBags={allBags}
+            packingItems={packingItems}
+            looseItems={looseItems}
+            depth={0}
+            inventoryEditMode={inventoryEditMode}
+            dispatch={dispatch}
+          />
+        ))}
+
+        {unassigned.length > 0 && (
+          <div className="category-block uncategorized" style={{ '--depth': 0 } as React.CSSProperties}>
+            <div className="category-header">
+              <span className="category-name muted">Unassigned</span>
+            </div>
+            <div className="category-body">
+              {unassigned.map(item => (
+                <BagItemRow
+                  key={item.id}
+                  item={item}
+                  bags={allBags}
+                  showBagSelector={true}
+                  dispatch={dispatch}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        <AddForm
+          placeholder="Add bag…"
+          onAdd={name =>
+            dispatch({ type: 'ADD_CATEGORY', name, parentId: null, isContainer: true, packingListId: activePackingListId })
+          }
+          className="bag-add-form"
         />
-      ))}
-
-      {unassigned.length > 0 && (
-        <div className="category-block uncategorized" style={{ '--depth': 0 } as React.CSSProperties}>
-          <div className="category-header">
-            <span className="category-name muted">Unassigned</span>
-          </div>
-          <div className="category-body">
-            {unassigned.map(item => (
-              <BagItemRow
-                key={item.id}
-                item={item}
-                bags={allBags}
-                showBagSelector={true}
-                dispatch={dispatch}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      <AddForm
-        placeholder="Add bag…"
-        onAdd={name =>
-          dispatch({ type: 'ADD_CATEGORY', name, parentId: null, isContainer: true, packingListId: activePackingListId })
-        }
-        className="bag-add-form"
-      />
-    </>
+      </>
+    </DragProvider>
   );
 }
 
@@ -1433,7 +1565,12 @@ function InventoryView({
   );
 
   return (
-    <DragProvider categories={inventoryCategories} items={items} dispatch={dispatch}>
+    <DragProvider
+      categories={inventoryCategories}
+      items={items}
+      allowCrossPackingListItemReorder
+      dispatch={dispatch}
+    >
       <div className="view">
         <PackingListBar
           packingLists={packingLists}
