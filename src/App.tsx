@@ -147,15 +147,19 @@ function DragProvider({
 
     const upperRect = upper?.getBoundingClientRect();
     const lowerRect = lower?.getBoundingClientRect();
+    if (!upperRect && !lowerRect) return null;
+    const lowerOnly = lowerRect ?? upperRect;
+    if (!lowerOnly) return null;
+
     const indicatorTop = upperRect && lowerRect
       ? (upperRect.bottom + lowerRect.top) / 2
-      : upperRect?.bottom ?? lowerRect!.top;
+      : upperRect ? upperRect.bottom : lowerOnly.top;
     const left = upperRect && lowerRect
       ? Math.min(upperRect.left, lowerRect.left)
-      : upperRect?.left ?? lowerRect!.left;
+      : upperRect ? upperRect.left : lowerOnly.left;
     const right = upperRect && lowerRect
       ? Math.max(upperRect.right, lowerRect.right)
-      : upperRect?.right ?? lowerRect!.right;
+      : upperRect ? upperRect.right : lowerOnly.right;
 
     const upperId = upper?.dataset.dragId;
     const lowerId = lower?.dataset.dragId;
