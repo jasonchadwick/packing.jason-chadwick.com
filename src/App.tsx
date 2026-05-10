@@ -872,7 +872,7 @@ function ItemRow({
         ref={rowRef}
         data-drag-id={item.id}
         data-drag-type="item"
-        className={`item-row${item.checked ? ' checked' : ''}${isDragging ? ' is-dragging' : ''}${viewLocation === 'inventory' && item.packingListId === activePackingListId && activePackingListId !== null ? ' in-packing' : ''}`}
+        className={`item-row${viewLocation === 'packing' && item.checked ? ' checked' : ''}${isDragging ? ' is-dragging' : ''}${viewLocation === 'inventory' && item.packingListId === activePackingListId && activePackingListId !== null ? ' in-packing' : ''}`}
         onDragOver={e => dragCtx.onDragOver(e, item.id, 'item')}
         onDrop={e => dragCtx.onDrop(e, item.id, 'item')}
         onPointerDown={e => {
